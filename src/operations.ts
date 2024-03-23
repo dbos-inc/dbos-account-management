@@ -1,21 +1,109 @@
-import { TransactionContext, Transaction, GetApi, ArgSource, ArgSources } from '@dbos-inc/dbos-sdk';
-import { Knex } from 'knex';
+import { HandlerContext, GetApi, ArgSource, ArgSources, PostApi, DBOSResponseError } from '@dbos-inc/dbos-sdk';
 
-// The schema of the database table used in this example.
-export interface dbos_hello {
-  name: string;
-  greet_count: number;
-}
+const defaultUser = 'google-oauth2|116389455801740676096';
 
-export class Hello {
+// These endpoints can only be called with an authenticated user on DBOS cloud
+export class CloudSubscription {
 
-  @GetApi('/greeting/:user') // Serve this function from HTTP GET requests to the /greeting endpoint with 'user' as a path parameter
-  @Transaction()  // Run this function as a database transaction
-  static async helloTransaction(ctxt: TransactionContext<Knex>, @ArgSource(ArgSources.URL) user: string) {
-    // Retrieve and increment the number of times this user has been greeted.
-    const query = "INSERT INTO dbos_hello (name, greet_count) VALUES (?, 1) ON CONFLICT (name) DO UPDATE SET greet_count = dbos_hello.greet_count + 1 RETURNING greet_count;";
-    const { rows } = await ctxt.client.raw(query, [user]) as { rows: dbos_hello[] };
-    const greet_count = rows[0].greet_count;
-    return `Hello, ${user}! You have been greeted ${greet_count} times.\n`;
+  @GetApi('/create-customer-portal')
+  static async createCustomerPortal(ctxt: HandlerContext) {
+    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY")); // Can we have global context?
+
+    // TODO: remove this test user, fail if we don't have an authenticated user.
+    const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
+    // Look up customer from stripe
+    const customers = await stripe.customers.search({
+      query: `metadata["auth0_user_id"]:"${authUser}"`,
+    });
+
+    let customerID = "";
+    if (customers.data.length === 1) {
+      customerID = customers.data[0].id;
+    } else {
+      ctxt.logger.error(`Unexpected number of customer records: ${customers.data.length}`);
+      throw new DBOSResponseError("Failed to look up customer from stripe", 400);
+    }
+
+    ctxt.logger.info(`Creating customer portal for ${customerID}`);
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerID,
+      return_url: 'https://dbos.dev'
+    })
+    if (!session.url) {
+      ctxt.logger.error("Failed to create a customer portal!");
+      throw new DBOSResponseError("Failed to create customer portal!", 500);
+    }
+    ctxt.koaContext.redirect(session.url);
   }
+
+  // This function redirects user to a subscribe to DBOS Pro
+  // Test pro-tier price key: 'price_1OxD4jP4cBCONpkqjBFLNraB';
+  @GetApi('/subscribe/:pricekey')
+  static async subscribeProPlan(ctxt: HandlerContext, @ArgSource(ArgSources.URL) pricekey: string) {
+    const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
+    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY"));
+
+    // Look up customer from stripe
+    const customers = await stripe.customers.search({
+      query: `metadata["auth0_user_id"]:"${authUser}"`,
+    });
+
+    let customerID = "";
+    if (customers.data.length === 1) {
+      customerID = customers.data[0].id;
+    } else {
+      ctxt.logger.error(`Unexpected number of customer records: ${customers.data.length}`);
+      throw new DBOSResponseError("Failed to look up customer from stripe", 400);
+    }
+
+    ctxt.logger.info(`Subscribing to DBOS pro for ${customerID}`);
+    try {
+      const prices = await stripe.prices.retrieve(pricekey);
+      ctxt.logger.info(prices);
+  
+      const session = await stripe.checkout.sessions.create({
+        customer: customerID,
+        billing_address_collection: 'auto',
+        line_items: [
+          {
+            price: prices.id,
+            // For metered billing, do not pass quantity
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        success_url: `https://docs.dbos.dev`,
+        cancel_url: `https://www.dbos.dev/pricing`,
+      });
+      if (!session.url) {
+        ctxt.logger.error("Failed to create a checkout session!")
+        throw new Error("Failed to create a checkout session!")
+      }
+      ctxt.koaContext.redirect(session.url);
+    } catch (err) {
+      ctxt.logger.error(`Failed to create a subscription: ${(err as Error).message}`);
+      throw new Error("Failed to create subscription");
+    }
+  }
+
+  @PostApi('/stripe_webhook')
+  static async stripeWebhook(ctxt: HandlerContext) {
+    const req = ctxt.koaContext.request;
+    const sigHeader = req.headers['stripe-signature'];
+    if (typeof sigHeader !== 'string') {
+      throw new DBOSResponseError("Invalid stripe request", 400);
+    }
+
+    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY"));
+    const payload: string = req.rawBody;
+    try {
+      const event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET"));
+      ctxt.logger.info(event);
+    } catch (err) {
+      ctxt.logger.error(err);
+      throw new DBOSResponseError("Webhook Error", 400);
+    }
+  }
+
 }

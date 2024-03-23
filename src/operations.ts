@@ -1,14 +1,19 @@
-import { HandlerContext, GetApi, ArgSource, ArgSources, PostApi, DBOSResponseError } from '@dbos-inc/dbos-sdk';
+import { HandlerContext, GetApi, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext } from '@dbos-inc/dbos-sdk';
+import Stripe from 'stripe';
 
 const defaultUser = 'google-oauth2|116389455801740676096';
+let stripe: Stripe;
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
 export class CloudSubscription {
+  @DBOSInitializer()
+  static async init(ctxt: InitContext) {
+    // Construct stripe
+    stripe = new Stripe(ctxt.getConfig("STRIPE_SECRET_KEY") as string);
+  }
 
   @GetApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
-    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY")); // Can we have global context?
-
     // TODO: remove this test user, fail if we don't have an authenticated user.
     const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
     // Look up customer from stripe
@@ -42,7 +47,6 @@ export class CloudSubscription {
   @GetApi('/subscribe/:pricekey')
   static async subscribeProPlan(ctxt: HandlerContext, @ArgSource(ArgSources.URL) pricekey: string) {
     const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
-    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY"));
 
     // Look up customer from stripe
     const customers = await stripe.customers.search({
@@ -95,10 +99,9 @@ export class CloudSubscription {
       throw new DBOSResponseError("Invalid stripe request", 400);
     }
 
-    const stripe = require('stripe')(ctxt.getConfig("STRIPE_SECRET_KEY"));
     const payload: string = req.rawBody;
     try {
-      const event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET"));
+      const event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET") as string);
       ctxt.logger.info(event);
     } catch (err) {
       ctxt.logger.error(err);

@@ -139,12 +139,59 @@ export class StripeWebhook {
     }
 
     const payload: string = req.rawBody;
+    let event: Stripe.Event;
     try {
-      const event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET") as string);
-      ctxt.logger.info(event);
+      event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET") as string);
     } catch (err) {
       ctxt.logger.error(err);
       throw new DBOSResponseError("Webhook Error", 400);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case 'customer.subscription.created':
+        const customerSubscriptionCreated = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.created
+        ctxt.logger.info(customerSubscriptionCreated);
+        break;
+      case 'customer.subscription.deleted':
+        const customerSubscriptionDeleted = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.deleted
+        ctxt.logger.info(customerSubscriptionDeleted);
+        break;
+      case 'customer.subscription.paused':
+        const customerSubscriptionPaused = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.paused
+        ctxt.logger.info(customerSubscriptionPaused)
+        break;
+      case 'customer.subscription.pending_update_applied':
+        const customerSubscriptionPendingUpdateApplied = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.pending_update_applied
+        ctxt.logger.info(customerSubscriptionPendingUpdateApplied)
+        break;
+      case 'customer.subscription.pending_update_expired':
+        const customerSubscriptionPendingUpdateExpired = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.pending_update_expired
+        ctxt.logger.info(customerSubscriptionPendingUpdateExpired)
+        break;
+      case 'customer.subscription.resumed':
+        const customerSubscriptionResumed = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.resumed
+        ctxt.logger.info(customerSubscriptionResumed)
+        break;
+      case 'customer.subscription.trial_will_end':
+        const customerSubscriptionTrialWillEnd = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.trial_will_end
+        ctxt.logger.info(customerSubscriptionTrialWillEnd)
+        break;
+      case 'customer.subscription.updated':
+        const customerSubscriptionUpdated = event.data.object;
+        // Then define and call a function to handle the event customer.subscription.updated
+        ctxt.logger.info(customerSubscriptionUpdated)
+        break;
+      // ... handle other event types
+      default:
+        ctxt.logger.info(`Unhandled event type ${event.type}`);
     }
   }
 }

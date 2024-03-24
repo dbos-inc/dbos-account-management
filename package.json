@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@dbos-inc/dbos-sdk": "^1.1.15",
+    "koa-jwt": "^4.0.4",
     "stripe": "^14.22.0"
   }
 }

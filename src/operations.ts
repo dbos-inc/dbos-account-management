@@ -1,21 +1,54 @@
-import { HandlerContext, GetApi, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext } from '@dbos-inc/dbos-sdk';
+import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext, RequiredRole, KoaMiddleware, Authentication, MiddlewareContext } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
+import jwt from "koa-jwt";
+import { koaJwtSecret } from "jwks-rsa";
 
-const defaultUser = 'google-oauth2|116389455801740676096';
+const DBOSLoginDomain = "dbos-inc.us.auth0.com"; // TODO: flip to prod, currently cannot use env variables in FC.
 let stripe: Stripe;
+let DBOSDomain: string;
+const DBOSPRoPlanString = "dbospro";
+
+async function userAuthMiddleware(ctxt: MiddlewareContext) {
+  ctxt.logger.debug("Request: " + JSON.stringify(ctxt.koaContext.request));
+  if (ctxt.requiredRole.length > 0) {
+    if (!ctxt.koaContext.state.user) {
+      throw new DBOSResponseError("No authenticated DBOS User!", 401);
+    }
+    ctxt.logger.debug(ctxt.koaContext.state.user);
+    const authenticatedUser = ctxt.koaContext.state.user["sub"] as string;
+    if (!authenticatedUser) {
+      throw new DBOSResponseError("No valid DBOS user found!", 401);
+    }
+    return { authenticatedRoles: ['user'], authenticatedUser: authenticatedUser };
+  }
+}
+
+const dbosJWT = jwt({
+  secret: koaJwtSecret({
+    jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
+    cache: true,
+    cacheMaxEntries: 5,
+    cacheMaxAge: 600000,
+  }),
+  issuer: `https://${DBOSLoginDomain}/`,
+  audience: 'dbos-cloud-api'
+});
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
+@Authentication(userAuthMiddleware)
+@KoaMiddleware(dbosJWT)
 export class CloudSubscription {
   @DBOSInitializer()
   static async init(ctxt: InitContext) {
     // Construct stripe
     stripe = new Stripe(ctxt.getConfig("STRIPE_SECRET_KEY") as string);
+    DBOSDomain = ctxt.getConfig("DBOS_DOMAIN") as string ?? "staging.dev.dbos.dev";
   }
 
-  @GetApi('/create-customer-portal')
+  @RequiredRole(['user'])
+  @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
-    // TODO: remove this test user, fail if we don't have an authenticated user.
-    const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
+    const authUser = ctxt.authenticatedUser;
     // Look up customer from stripe
     const customers = await stripe.customers.search({
       query: `metadata["auth0_user_id"]:"${authUser}"`,
@@ -42,12 +75,17 @@ export class CloudSubscription {
     ctxt.koaContext.redirect(session.url);
   }
 
-  // This function redirects user to a subscribe to DBOS Pro
-  // Test pro-tier price key: 'price_1OxD4jP4cBCONpkqjBFLNraB';
-  @GetApi('/subscribe/:pricekey')
-  static async subscribeProPlan(ctxt: HandlerContext, @ArgSource(ArgSources.URL) pricekey: string) {
-    const authUser = ctxt.authenticatedUser == "" ? defaultUser : ctxt.authenticatedUser;
+  // This function redirects user to a subscription page
+  @RequiredRole(['user'])
+  @PostApi('/subscribe')
+  static async subscribePlan(ctxt: HandlerContext, @ArgSource(ArgSources.BODY) plan: string) {
+    // Currently, we only support DBOS Pro
+    if (plan !== DBOSPRoPlanString) {
+      ctxt.logger.error(`Invalid DBOS plan: ${plan}`);
+      throw new DBOSResponseError("Invalid DBOS Plan", 400);
+    }
 
+    const authUser = ctxt.authenticatedUser;
     // Look up customer from stripe
     const customers = await stripe.customers.search({
       query: `metadata["auth0_user_id"]:"${authUser}"`,
@@ -63,8 +101,7 @@ export class CloudSubscription {
 
     ctxt.logger.info(`Subscribing to DBOS pro for ${customerID}`);
     try {
-      const prices = await stripe.prices.retrieve(pricekey);
-      ctxt.logger.info(prices);
+      const prices = await stripe.prices.retrieve(ctxt.getConfig("DBOS_PRO_PRICE") as string);
   
       const session = await stripe.checkout.sessions.create({
         customer: customerID,
@@ -72,7 +109,6 @@ export class CloudSubscription {
         line_items: [
           {
             price: prices.id,
-            // For metered billing, do not pass quantity
             quantity: 1,
           },
         ],
@@ -90,7 +126,10 @@ export class CloudSubscription {
       throw new Error("Failed to create subscription");
     }
   }
+}
 
+// Webhook has to be in separate class because it's not using our auth middleware
+export class StripeWebhook {
   @PostApi('/stripe_webhook')
   static async stripeWebhook(ctxt: HandlerContext) {
     const req = ctxt.koaContext.request;
@@ -108,5 +147,4 @@ export class CloudSubscription {
       throw new DBOSResponseError("Webhook Error", 400);
     }
   }
-
 }

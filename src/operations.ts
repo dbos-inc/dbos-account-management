@@ -101,7 +101,7 @@ export class CloudSubscription {
 
     ctxt.logger.info(`Subscribing to DBOS pro for ${customerID}`);
     try {
-      const prices = await stripe.prices.retrieve(ctxt.getConfig("DBOS_PRO_PRICE") as string);
+      const prices = await stripe.prices.retrieve(ctxt.getConfig("STRIPE_DBOS_PRO_PRICE") as string);
   
       const session = await stripe.checkout.sessions.create({
         customer: customerID,

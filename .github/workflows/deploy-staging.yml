@@ -21,6 +21,7 @@ jobs:
         npm ci
         npm run build
         npm prune --omit=dev
+        npm install @dbos-inc/dbos-cloud@latest
     - name: Deploy to staging
       run: python3 scripts/dbos_deploy.py
       env:

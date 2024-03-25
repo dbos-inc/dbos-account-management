@@ -16,6 +16,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install dependencies
+      run: |
+        npm ci
+        npm run build
+        npm prune --omit=dev
     - name: Deploy to staging
       run: python3 scripts/dbos_deploy.py
       env:

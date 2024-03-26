@@ -4,8 +4,8 @@ import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
 
 // TODO: currently cannot use env variables in FC, so we need to switch it manually.
-// const DBOSLoginDomain = "dbos-inc.us.auth0.com";
-const DBOSLoginDomain = "login.dbos.dev";
+const DBOSLoginDomain = "dbos-inc.us.auth0.com";
+// const DBOSLoginDomain = "login.dbos.dev";
 let stripe: Stripe;
 let DBOSDomain: string;
 const DBOSPRoPlanString = "dbospro";
@@ -150,46 +150,86 @@ export class StripeWebhook {
     }
 
     // Handle the event
+    // event.id can be used as the idempotency key for workflows
     switch (event.type) {
       case 'customer.subscription.created':
+        ctxt.logger.info("User subscribed to DBOS!");
         const customerSubscriptionCreated = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.created
-        ctxt.logger.info(customerSubscriptionCreated);
+        if (customerSubscriptionCreated.status !== "active") {
+          ctxt.logger.error(`Subscription ${customerSubscriptionCreated.id} not active`);
+          break;
+        }
+        if (customerSubscriptionCreated.items.data.length !== 1) {
+          ctxt.logger.error(`Subscription ${customerSubscriptionCreated.id} has more than one data item`);
+          break;
+        }
+        const price = customerSubscriptionCreated.items.data[0].price.id;
+        ctxt.logger.info(`Subscription to price ${price}`);
+        let customerID = customerSubscriptionCreated.customer as string;
+        let customer = await stripe.customers.retrieve(customerID);
+        if (customer.deleted) {
+          ctxt.logger.error(`Customer ${customerID} is deleted!`);
+          break;
+        }
+        let dbosAuthID = customer.metadata["auth0_user_id"];
+        if (!dbosAuthID) {
+          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
+          break;
+        } else {
+          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
+        }
+
+        // Talk to DBOS Cloud
         break;
       case 'customer.subscription.deleted':
+        ctxt.logger.info("User canceled DBOS subscription!");
         const customerSubscriptionDeleted = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.deleted
-        ctxt.logger.info(customerSubscriptionDeleted);
-        break;
-      case 'customer.subscription.paused':
-        const customerSubscriptionPaused = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.paused
-        ctxt.logger.info(customerSubscriptionPaused)
-        break;
-      case 'customer.subscription.pending_update_applied':
-        const customerSubscriptionPendingUpdateApplied = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.pending_update_applied
-        ctxt.logger.info(customerSubscriptionPendingUpdateApplied)
-        break;
-      case 'customer.subscription.pending_update_expired':
-        const customerSubscriptionPendingUpdateExpired = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.pending_update_expired
-        ctxt.logger.info(customerSubscriptionPendingUpdateExpired)
-        break;
-      case 'customer.subscription.resumed':
-        const customerSubscriptionResumed = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.resumed
-        ctxt.logger.info(customerSubscriptionResumed)
-        break;
-      case 'customer.subscription.trial_will_end':
-        const customerSubscriptionTrialWillEnd = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.trial_will_end
-        ctxt.logger.info(customerSubscriptionTrialWillEnd)
+        if (customerSubscriptionDeleted.status !== "active") {
+          ctxt.logger.error(`Subscription ${customerSubscriptionDeleted.id} not active`);
+          break;
+        }
+        if (customerSubscriptionDeleted.items.data.length !== 1) {
+          ctxt.logger.error(`Subscription ${customerSubscriptionDeleted.id} has more than one data item`);
+          break;
+        }
+        customerID = customerSubscriptionDeleted.customer as string;
+        customer = await stripe.customers.retrieve(customerID);
+        if (customer.deleted) {
+          ctxt.logger.error(`Customer ${customerID} is deleted!`);
+          break;
+        }
+        dbosAuthID = customer.metadata["auth0_user_id"];
+        if (!dbosAuthID) {
+          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
+          break;
+        } else {
+          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
+        }
         break;
       case 'customer.subscription.updated':
+        ctxt.logger.info("User updated DBOS subscription!");
         const customerSubscriptionUpdated = event.data.object;
-        // Then define and call a function to handle the event customer.subscription.updated
-        ctxt.logger.info(customerSubscriptionUpdated)
+        if (customerSubscriptionUpdated.status !== "active") {
+          ctxt.logger.error(`Subscription ${customerSubscriptionUpdated.id} not active`);
+          break;
+        }
+        if (customerSubscriptionUpdated.items.data.length !== 1) {
+          ctxt.logger.error(`Subscription ${customerSubscriptionUpdated.id} has more than one data item`);
+          break;
+        }
+        customerID = customerSubscriptionUpdated.customer as string;
+        customer = await stripe.customers.retrieve(customerID);
+        if (customer.deleted) {
+          ctxt.logger.error(`Customer ${customerID} is deleted!`);
+          break;
+        }
+        dbosAuthID = customer.metadata["auth0_user_id"];
+        if (!dbosAuthID) {
+          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
+          break;
+        } else {
+          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
+        }
         break;
       // ... handle other event types
       default:

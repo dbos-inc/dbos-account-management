@@ -66,7 +66,7 @@ def deploy(path: str):
     if "error" in output:
         raise Exception(f"Database {DB_NAME} errored!")
 
-    run_subprocess(['npx', 'dbos-cloud', 'applications', 'register', '--database', DB_NAME], path, check=False)
+    # run_subprocess(['npx', 'dbos-cloud', 'applications', 'register', '--database', DB_NAME], path, check=False)
     run_subprocess(['npx', 'dbos-cloud', 'applications', 'deploy'], path)
 
 def run_subprocess(command, path: str, check: bool = True, silent: bool = False):

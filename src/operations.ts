@@ -151,6 +151,9 @@ export class StripeWebhook {
 
     // Handle the event
     // event.id can be used as the idempotency key for workflows
+    let customerID: string;
+    let customer;
+    let dbosAuthID: string;
     switch (event.type) {
       case 'customer.subscription.created':
         ctxt.logger.info("User subscribed to DBOS!");
@@ -165,13 +168,13 @@ export class StripeWebhook {
         }
         const price = customerSubscriptionCreated.items.data[0].price.id;
         ctxt.logger.info(`Subscription to price ${price}`);
-        let customerID = customerSubscriptionCreated.customer as string;
-        let customer = await stripe.customers.retrieve(customerID);
+        customerID = customerSubscriptionCreated.customer as string;
+        customer = await stripe.customers.retrieve(customerID);
         if (customer.deleted) {
           ctxt.logger.error(`Customer ${customerID} is deleted!`);
           break;
         }
-        let dbosAuthID = customer.metadata["auth0_user_id"];
+        dbosAuthID = customer.metadata["auth0_user_id"];
         if (!dbosAuthID) {
           ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
           break;

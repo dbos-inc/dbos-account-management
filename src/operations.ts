@@ -3,7 +3,8 @@ import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
 
-const DBOSLoginDomain = "dbos-inc.us.auth0.com"; // TODO: flip to prod, currently cannot use env variables in FC.
+// const DBOSLoginDomain = "dbos-inc.us.auth0.com"; // TODO: currently cannot use env variables in FC.
+const DBOSLoginDomain = "login.dbos.dev";
 let stripe: Stripe;
 let DBOSDomain: string;
 const DBOSPRoPlanString = "dbospro";

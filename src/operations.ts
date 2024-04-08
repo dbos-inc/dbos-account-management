@@ -1,14 +1,16 @@
-import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext, RequiredRole, KoaMiddleware, Authentication, MiddlewareContext } from '@dbos-inc/dbos-sdk';
+import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext, RequiredRole, KoaMiddleware, Authentication, MiddlewareContext, CommunicatorContext } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
+import { retrieveStripeCustomer } from './utils';
+
+let stripe: Stripe;
 
 // TODO: currently cannot use env variables in FC, so we need to switch it manually.
 const DBOSLoginDomain = "dbos-inc.us.auth0.com";
 // const DBOSLoginDomain = "login.dbos.dev";
-let stripe: Stripe;
 let DBOSDomain: string;
-const DBOSPRoPlanString = "dbospro";
+const DBOSProPlanString = "dbospro";
 
 async function userAuthMiddleware(ctxt: MiddlewareContext) {
   ctxt.logger.debug("Request: " + JSON.stringify(ctxt.koaContext.request));
@@ -51,21 +53,8 @@ export class CloudSubscription {
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
     const authUser = ctxt.authenticatedUser;
-    // Look up customer from stripe
-    const customers = await stripe.customers.search({
-      query: `metadata["auth0_user_id"]:"${authUser}"`,
-    });
-
-    let customerID = "";
-    if (customers.data.length === 1) {
-      customerID = customers.data[0].id;
-    } else {
-      ctxt.logger.error(`Unexpected number of customer records: ${customers.data.length}`);
-      throw new DBOSResponseError("Failed to look up customer from stripe", 400);
-    }
-
-    ctxt.logger.info(`Creating customer portal for ${customerID}`);
-
+    const customerID = await retrieveStripeCustomer(stripe, authUser);
+  
     const session = await stripe.billingPortal.sessions.create({
       customer: customerID,
       return_url: 'https://dbos.dev'
@@ -81,30 +70,17 @@ export class CloudSubscription {
   @RequiredRole(['user'])
   @PostApi('/subscribe')
   static async subscribePlan(ctxt: HandlerContext, @ArgSource(ArgSources.BODY) plan: string) {
-    // Currently, we only support DBOS Pro
-    if (plan !== DBOSPRoPlanString) {
+    // Validate argument
+    if (plan !== DBOSProPlanString) {
       ctxt.logger.error(`Invalid DBOS plan: ${plan}`);
       throw new DBOSResponseError("Invalid DBOS Plan", 400);
     }
 
     const authUser = ctxt.authenticatedUser;
-    // Look up customer from stripe
-    const customers = await stripe.customers.search({
-      query: `metadata["auth0_user_id"]:"${authUser}"`,
-    });
+    const customerID = await retrieveStripeCustomer(stripe, authUser);
 
-    let customerID = "";
-    if (customers.data.length === 1) {
-      customerID = customers.data[0].id;
-    } else {
-      ctxt.logger.error(`Unexpected number of customer records: ${customers.data.length}`);
-      throw new DBOSResponseError("Failed to look up customer from stripe", 400);
-    }
-
-    ctxt.logger.info(`Subscribing to DBOS pro for ${customerID}`);
     try {
       const prices = await stripe.prices.retrieve(ctxt.getConfig("STRIPE_DBOS_PRO_PRICE") as string);
-  
       const session = await stripe.checkout.sessions.create({
         customer: customerID,
         billing_address_collection: 'auto',
@@ -119,7 +95,6 @@ export class CloudSubscription {
         cancel_url: `https://www.dbos.dev/pricing`,
       });
       if (!session.url) {
-        ctxt.logger.error("Failed to create a checkout session!")
         throw new Error("Failed to create a checkout session!")
       }
       ctxt.koaContext.redirect(session.url);

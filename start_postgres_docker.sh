@@ -21,6 +21,6 @@ for i in {1..30}; do
 done
 
 # Create a database in Postgres.
-docker exec dbos-db psql -U postgres -c "CREATE DATABASE hello;"
+docker exec dbos-db psql -U postgres -c "CREATE DATABASE cloudsub;"
 
 echo "Database started successfully!"

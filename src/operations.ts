@@ -1,31 +1,14 @@
-import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, DBOSInitializer, InitContext, RequiredRole, KoaMiddleware, Authentication, MiddlewareContext, CommunicatorContext } from '@dbos-inc/dbos-sdk';
+import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, RequiredRole, KoaMiddleware, Authentication, Workflow } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
-import { retrieveStripeCustomer } from './utils';
-
-let stripe: Stripe;
+import { stripe, Utils } from './utils';
+export { Utils } from './utils';
 
 // TODO: currently cannot use env variables in FC, so we need to switch it manually.
 const DBOSLoginDomain = "dbos-inc.us.auth0.com";
 // const DBOSLoginDomain = "login.dbos.dev";
-let DBOSDomain: string;
 const DBOSProPlanString = "dbospro";
-
-async function userAuthMiddleware(ctxt: MiddlewareContext) {
-  ctxt.logger.debug("Request: " + JSON.stringify(ctxt.koaContext.request));
-  if (ctxt.requiredRole.length > 0) {
-    if (!ctxt.koaContext.state.user) {
-      throw new DBOSResponseError("No authenticated DBOS User!", 401);
-    }
-    ctxt.logger.debug(ctxt.koaContext.state.user);
-    const authenticatedUser = ctxt.koaContext.state.user["sub"] as string;
-    if (!authenticatedUser) {
-      throw new DBOSResponseError("No valid DBOS user found!", 401);
-    }
-    return { authenticatedRoles: ['user'], authenticatedUser: authenticatedUser };
-  }
-}
 
 const dbosJWT = jwt({
   secret: koaJwtSecret({
@@ -39,31 +22,20 @@ const dbosJWT = jwt({
 });
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
-@Authentication(userAuthMiddleware)
+@Authentication(Utils.userAuthMiddleware)
 @KoaMiddleware(dbosJWT)
 export class CloudSubscription {
-  @DBOSInitializer()
-  static async init(ctxt: InitContext) {
-    // Construct stripe
-    stripe = new Stripe(ctxt.getConfig("STRIPE_SECRET_KEY") as string);
-    DBOSDomain = ctxt.getConfig("DBOS_DOMAIN") as string ?? "staging.dev.dbos.dev";
-  }
-
   @RequiredRole(['user'])
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
     const authUser = ctxt.authenticatedUser;
-    const customerID = await retrieveStripeCustomer(stripe, authUser);
-  
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerID,
-      return_url: 'https://dbos.dev'
-    })
-    if (!session.url) {
+    const customerID = await ctxt.invoke(Utils).retrieveStripeCustomer(authUser);
+    const sessionURL = await ctxt.invoke(Utils).createPortal(customerID);
+    if (!sessionURL) {
       ctxt.logger.error("Failed to create a customer portal!");
       throw new DBOSResponseError("Failed to create customer portal!", 500);
     }
-    ctxt.koaContext.redirect(session.url);
+    ctxt.koaContext.redirect(sessionURL);
   }
 
   // This function redirects user to a subscription page
@@ -77,31 +49,12 @@ export class CloudSubscription {
     }
 
     const authUser = ctxt.authenticatedUser;
-    const customerID = await retrieveStripeCustomer(stripe, authUser);
-
-    try {
-      const prices = await stripe.prices.retrieve(ctxt.getConfig("STRIPE_DBOS_PRO_PRICE") as string);
-      const session = await stripe.checkout.sessions.create({
-        customer: customerID,
-        billing_address_collection: 'auto',
-        line_items: [
-          {
-            price: prices.id,
-            quantity: 1,
-          },
-        ],
-        mode: 'subscription',
-        success_url: `https://docs.dbos.dev`,
-        cancel_url: `https://www.dbos.dev/pricing`,
-      });
-      if (!session.url) {
-        throw new Error("Failed to create a checkout session!")
-      }
-      ctxt.koaContext.redirect(session.url);
-    } catch (err) {
-      ctxt.logger.error(`Failed to create a subscription: ${(err as Error).message}`);
-      throw new Error("Failed to create subscription");
+    const customerID = await ctxt.invoke(Utils).retrieveStripeCustomer(authUser);
+    const sessionURL = await ctxt.invoke(Utils).createCheckout(customerID);
+    if (!sessionURL) {
+      throw new Error("Failed to create a checkout session!")
     }
+    ctxt.koaContext.redirect(sessionURL);
   }
 }
 
@@ -109,6 +62,7 @@ export class CloudSubscription {
 export class StripeWebhook {
   @PostApi('/stripe_webhook')
   static async stripeWebhook(ctxt: HandlerContext) {
+    // Make sure the request is actually from Stripe.
     const req = ctxt.koaContext.request;
     const sigHeader = req.headers['stripe-signature'];
     if (typeof sigHeader !== 'string') {
@@ -124,92 +78,22 @@ export class StripeWebhook {
       throw new DBOSResponseError("Webhook Error", 400);
     }
 
-    // Handle the event
-    // event.id can be used as the idempotency key for workflows
-    let customerID: string;
-    let customer;
-    let dbosAuthID: string;
+    // Handle the event.
+    // Use event ID as the idempotency key for the workflow, making sure once-and-only-once execution.
+    // Invoke the workflow but don't wait for it to finish. Fast response to Stripe.
     switch (event.type) {
       case 'customer.subscription.created':
-        ctxt.logger.info("User subscribed to DBOS!");
-        const customerSubscriptionCreated = event.data.object;
-        if (customerSubscriptionCreated.status !== "active") {
-          ctxt.logger.error(`Subscription ${customerSubscriptionCreated.id} not active`);
-          break;
-        }
-        if (customerSubscriptionCreated.items.data.length !== 1) {
-          ctxt.logger.error(`Subscription ${customerSubscriptionCreated.id} has more than one data item`);
-          break;
-        }
-        const price = customerSubscriptionCreated.items.data[0].price.id;
-        ctxt.logger.info(`Subscription to price ${price}`);
-        customerID = customerSubscriptionCreated.customer as string;
-        customer = await stripe.customers.retrieve(customerID);
-        if (customer.deleted) {
-          ctxt.logger.error(`Customer ${customerID} is deleted!`);
-          break;
-        }
-        dbosAuthID = customer.metadata["auth0_user_id"];
-        if (!dbosAuthID) {
-          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
-          break;
-        } else {
-          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
-        }
-
-        // Talk to DBOS Cloud
-        break;
       case 'customer.subscription.deleted':
-        ctxt.logger.info("User canceled DBOS subscription!");
-        const customerSubscriptionDeleted = event.data.object;
-        if (customerSubscriptionDeleted.status !== "active") {
-          ctxt.logger.error(`Subscription ${customerSubscriptionDeleted.id} not active`);
-          break;
-        }
-        if (customerSubscriptionDeleted.items.data.length !== 1) {
-          ctxt.logger.error(`Subscription ${customerSubscriptionDeleted.id} has more than one data item`);
-          break;
-        }
-        customerID = customerSubscriptionDeleted.customer as string;
-        customer = await stripe.customers.retrieve(customerID);
-        if (customer.deleted) {
-          ctxt.logger.error(`Customer ${customerID} is deleted!`);
-          break;
-        }
-        dbosAuthID = customer.metadata["auth0_user_id"];
-        if (!dbosAuthID) {
-          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
-          break;
-        } else {
-          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
-        }
-        break;
       case 'customer.subscription.updated':
-        ctxt.logger.info("User updated DBOS subscription!");
-        const customerSubscriptionUpdated = event.data.object;
-        if (customerSubscriptionUpdated.status !== "active") {
-          ctxt.logger.error(`Subscription ${customerSubscriptionUpdated.id} not active`);
-          break;
-        }
-        if (customerSubscriptionUpdated.items.data.length !== 1) {
-          ctxt.logger.error(`Subscription ${customerSubscriptionUpdated.id} has more than one data item`);
-          break;
-        }
-        customerID = customerSubscriptionUpdated.customer as string;
-        customer = await stripe.customers.retrieve(customerID);
-        if (customer.deleted) {
-          ctxt.logger.error(`Customer ${customerID} is deleted!`);
-          break;
-        }
-        dbosAuthID = customer.metadata["auth0_user_id"];
-        if (!dbosAuthID) {
-          ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
-          break;
-        } else {
-          ctxt.logger.info(`Found DBOS Auth ID: ${dbosAuthID}`);
+        const subscription = event.data.object as Stripe.Subscription;
+        await ctxt.invoke(Utils, event.id).subscriptionWorkflow(subscription.id, subscription.customer as string);
+        break;
+      case 'checkout.session.completed':
+        const checkout = event.data.object as Stripe.Checkout.Session;
+        if (checkout.mode === 'subscription') {
+          await ctxt.invoke(Utils, event.id).subscriptionWorkflow(checkout.subscription as string, checkout.customer as string);
         }
         break;
-      // ... handle other event types
       default:
         ctxt.logger.info(`Unhandled event type ${event.type}`);
     }

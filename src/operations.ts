@@ -29,8 +29,7 @@ export class CloudSubscription {
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
     const authUser = ctxt.authenticatedUser;
-    const customerID = await ctxt.invoke(Utils).retrieveStripeCustomer(authUser);
-    const sessionURL = await ctxt.invoke(Utils).createPortal(customerID);
+    const sessionURL = await ctxt.invoke(Utils).createPortal(authUser);
     if (!sessionURL) {
       ctxt.logger.error("Failed to create a customer portal!");
       throw new DBOSResponseError("Failed to create customer portal!", 500);
@@ -49,8 +48,7 @@ export class CloudSubscription {
     }
 
     const authUser = ctxt.authenticatedUser;
-    const customerID = await ctxt.invoke(Utils).retrieveStripeCustomer(authUser);
-    const sessionURL = await ctxt.invoke(Utils).createCheckout(customerID);
+    const sessionURL = await ctxt.invoke(Utils).createCheckout(authUser);
     if (!sessionURL) {
       throw new Error("Failed to create a checkout session!")
     }

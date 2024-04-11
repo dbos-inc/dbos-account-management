@@ -1,8 +1,14 @@
 import { Communicator, CommunicatorContext, DBOSInitializer, DBOSResponseError, InitContext, MiddlewareContext, Transaction, TransactionContext, Workflow, WorkflowContext } from "@dbos-inc/dbos-sdk";
 import Stripe from "stripe";
 import { Knex } from 'knex';
+import axios from 'axios';
 
 export let stripe: Stripe;
+// TODO: currently cannot use env variables in FC, so we need to switch it manually.
+export const DBOSLoginDomain = "dbos-inc.us.auth0.com";
+// export const DBOSLoginDomain = "login.dbos.dev";
+
+let dbosAuth0Token: string;
 
 export class Utils {
   static async userAuthMiddleware(ctxt: MiddlewareContext) {
@@ -97,15 +103,85 @@ export class Utils {
   }
 
   @Transaction()
-  static async updateDBRecord(ctxt: TransactionContext<Knex>, dbosAuthID: string, stripeCustomerID: string, plan: string) {
+  static async updateDBRecord(ctxt: TransactionContext<Knex>, dbosAuthID: string, stripeCustomerID: string, plan: string): Promise<boolean>{
+    const check = `SELECT dbos_plan FROM subscriptions WHERE auth0_user_id = ?`;
+    const { rows } = await ctxt.client.raw(check, [dbosAuthID]) as { rows: dbos_subscriptions[]};
+    if (rows.length > 0) {
+      const currentPlan = rows[0].dbos_plan;
+      if (currentPlan === plan) {
+        ctxt.logger.info(`User ${dbosAuthID} already has plan ${plan}`);
+        return false;
+      }
+    }
     // Use knex to upsert into subscriptions table.
     const query = `INSERT INTO subscriptions (auth0_user_id, stripe_customer_id, dbos_plan, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (auth0_user_id) DO UPDATE SET dbos_plan = EXCLUDED.dbos_plan, updated_at = EXCLUDED.updated_at`;
     await ctxt.client.raw(query, [dbosAuthID, stripeCustomerID, plan, Date.now()]);
+    return true;
   }
 
-  @Communicator()
+  @Communicator({intervalSeconds: 10})  
+  static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
+    const username = 'dbos-cloud-subscription@dbos.dev';
+    const password = ctxt.getConfig("DBOS_DEPLOY_PASSWORD") as string;
+    const DBOS_DOMAIN = ctxt.getConfig("DBOS_DOMAIN") as string;
+    const clientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
+    const clientSecret = ctxt.getConfig("DBOS_AUTH0_CLIENT_SECRET") as string;
+
+    const loginRequest = {
+      method: 'POST',
+      url: `https://${DBOSLoginDomain}/oauth/token`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      data: new URLSearchParams({
+        grant_type: 'password',
+        username: username,
+        password: password,
+        audience: 'dbos-cloud-api',
+        client_id: clientID,
+        client_secret: clientSecret,
+        scope: 'read:sample',
+      })
+    };
+    try {
+      const response = await axios.request(loginRequest);
+      const tokenResponse = response.data as TokenResponse;
+      dbosAuth0Token = tokenResponse.access_token;
+      return dbosAuth0Token;
+    } catch (err) {
+      ctxt.logger.error(`Failed to get token: ${(err as Error).message}`);
+      dbosAuth0Token = "";
+      throw err;
+    }
+  }
+
+  @Communicator({retriesAllowed: false}) // TODO: config retries
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
-    
+    // Obtain cloud credentials
+    let token = dbosAuth0Token;
+    if (!token) {
+      token = await Utils.retrieveCloudCredential(ctxt);
+    }
+
+    // Update the entitlement in DBOS Cloud
+    const DBOS_DOMAIN = ctxt.getConfig("DBOS_DOMAIN") as string;
+    const entitlementRequest = {
+      method: 'POST',
+      url: `https://${DBOS_DOMAIN}/admin/v1alpha1/users/update-sub`,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        subject_id: dbosAuthID,
+        subscription_plan: plan,
+      }
+    };
+    try {
+      const response = await axios.request(entitlementRequest);
+      ctxt.logger.info(`Update entitlement response: ${response.status}`);
+    } catch (err) {
+      ctxt.logger.error(`Failed to update entitlement: ${(err as Error).message}`);
+      throw err;
+    }
   }
 
   @Workflow()
@@ -119,16 +195,26 @@ export class Utils {
       return;
     } else if (subscription.status === 'active' && subscription.price === proPrice) {
       ctxt.logger.info(`Subscription ${subscriptionID} is active for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'pro');
-      // Then talk to DBOS Cloud to activate the subscription.
+      const needUpdate = await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'pro');
+      if (needUpdate) {
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
+      }
     } else if (subscription.status === 'canceled' && subscription.price === proPrice) {
       ctxt.logger.info(`Subscription ${subscriptionID} is canceled for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'free');
-      // Then talk to DBOS Cloud to deactivate the subscription.
+      const needUpdate = await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'free');
+      if (needUpdate) {
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
+      }
     } else {
       ctxt.logger.warn(`Unknown subscription status: ${subscription.status}; or price: ${subscription.price}; user ${dbosAuthID}`);
     }
   }
+}
+
+interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
 }
 
 interface dbos_subscriptions {

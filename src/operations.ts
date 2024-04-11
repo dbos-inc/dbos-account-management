@@ -2,12 +2,9 @@ import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, Requ
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
-import { stripe, Utils } from './utils';
+import { DBOSLoginDomain, stripe, Utils } from './utils';
 export { Utils } from './utils';
 
-// TODO: currently cannot use env variables in FC, so we need to switch it manually.
-const DBOSLoginDomain = "dbos-inc.us.auth0.com";
-// const DBOSLoginDomain = "login.dbos.dev";
 const DBOSProPlanString = "dbospro";
 
 const dbosJWT = jwt({
@@ -75,6 +72,11 @@ export class StripeWebhook {
       ctxt.logger.error(err);
       throw new DBOSResponseError("Webhook Error", 400);
     }
+
+    // Fetch auth0 credential every 6 hours.
+    const ts = Date.now();
+    const uuidStr = 'authtoken-' + (ts - (ts % 21600000)).toString();
+    await ctxt.invoke(Utils, uuidStr).retrieveCloudCredential();
 
     // Handle the event.
     // Use event ID as the idempotency key for the workflow, making sure once-and-only-once execution.

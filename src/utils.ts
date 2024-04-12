@@ -3,10 +3,11 @@ import Stripe from "stripe";
 import { Knex } from 'knex';
 import axios from 'axios';
 
-export let stripe: Stripe;
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+
 // TODO: currently cannot use env variables in FC, so we need to switch it manually.
-export const DBOSLoginDomain = "dbos-inc.us.auth0.com";
-// export const DBOSLoginDomain = "login.dbos.dev";
+const DBOS_DOMAIN = process.env.DBOS_DOMAIN;
+export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 
 let dbosAuth0Token: string;
 
@@ -24,12 +25,6 @@ export class Utils {
       }
       return { authenticatedRoles: ['user'], authenticatedUser: authenticatedUser };
     }
-  }
-
-  @DBOSInitializer()
-  static async init(ctxt: InitContext) {
-    // Construct stripe
-    stripe = new Stripe(ctxt.getConfig("STRIPE_SECRET_KEY") as string);
   }
 
   @Communicator()  
@@ -123,7 +118,6 @@ export class Utils {
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
     const username = 'dbos-cloud-subscription@dbos.dev';
     const password = ctxt.getConfig("DBOS_DEPLOY_PASSWORD") as string;
-    const DBOS_DOMAIN = ctxt.getConfig("DBOS_DOMAIN") as string;
     const clientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
     const clientSecret = ctxt.getConfig("DBOS_AUTH0_CLIENT_SECRET") as string;
 
@@ -162,7 +156,6 @@ export class Utils {
     }
 
     // Update the entitlement in DBOS Cloud
-    const DBOS_DOMAIN = ctxt.getConfig("DBOS_DOMAIN") as string;
     const entitlementRequest = {
       method: 'POST',
       url: `https://${DBOS_DOMAIN}/admin/v1alpha1/users/update-sub`,

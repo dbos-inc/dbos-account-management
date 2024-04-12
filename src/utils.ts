@@ -5,7 +5,6 @@ import axios from 'axios';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// TODO: currently cannot use env variables in FC, so we need to switch it manually.
 const DBOS_DOMAIN = process.env.DBOS_DOMAIN;
 export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 
@@ -147,7 +146,7 @@ export class Utils {
     }
   }
 
-  @Communicator({retriesAllowed: false}) // TODO: config retries
+  @Communicator({intervalSeconds: 10})
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
     // Obtain cloud credentials
     let token = dbosAuth0Token;

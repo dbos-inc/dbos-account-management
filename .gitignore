@@ -1,3 +1,6 @@
+local-stagging.env
+local-prod.env
+
 # Logs
 **/.DS_Store
 **/prisma/migrations/*

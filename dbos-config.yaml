@@ -23,3 +23,10 @@ application:
 env:
   DBOS_DOMAIN: ${DBOS_DOMAIN}
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+http:
+  cors_middleware: true
+  credentials: true
+  allowed_origins:
+    - 'https://dbos.webflow.io'
+    - 'https://www.dbos.dev'
+    - 'https://dbos.dev'

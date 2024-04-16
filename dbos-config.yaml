@@ -30,3 +30,6 @@ http:
     - 'https://dbos.webflow.io'
     - 'https://www.dbos.dev'
     - 'https://dbos.dev'
+telemetry:
+  logs:
+    logLevel: 'debug'

@@ -6,7 +6,7 @@ import { DBOSLoginDomain, stripe, Utils } from './utils';
 export { Utils } from './utils';
 
 const DBOSProPlanString = "dbospro";
-
+console.log("login domain: " + DBOSLoginDomain);
 const dbosJWT = jwt({
   secret: koaJwtSecret({
     jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,

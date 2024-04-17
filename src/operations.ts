@@ -1,4 +1,4 @@
-import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, RequiredRole, KoaMiddleware, Authentication, Workflow } from '@dbos-inc/dbos-sdk';
+import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, RequiredRole, KoaMiddleware, Authentication } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";

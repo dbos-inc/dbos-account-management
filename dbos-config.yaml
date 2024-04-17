@@ -32,4 +32,4 @@ http:
     - 'https://dbos.dev'
 telemetry:
   logs:
-    logLevel: 'debug'
+    logLevel: 'info'

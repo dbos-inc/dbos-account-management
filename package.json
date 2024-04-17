@@ -19,7 +19,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@dbos-inc/dbos-sdk": "^1.5.4-preview",
+    "@dbos-inc/dbos-sdk": "^1.6.5-preview",
     "jwks-rsa": "^3.1.0",
     "koa-jwt": "^4.0.4",
     "stripe": "^14.22.0"

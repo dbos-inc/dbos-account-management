@@ -31,7 +31,7 @@ export class CloudSubscription {
       ctxt.logger.error("Failed to create a customer portal!");
       throw new DBOSResponseError("Failed to create customer portal!", 500);
     }
-    ctxt.koaContext.redirect(sessionURL);
+    return { url: sessionURL };
   }
 
   // This function redirects user to a subscription page
@@ -49,7 +49,7 @@ export class CloudSubscription {
     if (!sessionURL) {
       throw new Error("Failed to create a checkout session!")
     }
-    ctxt.koaContext.redirect(sessionURL);
+    return { url: sessionURL };
   }
 }
 

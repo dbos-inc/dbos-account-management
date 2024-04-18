@@ -1,4 +1,5 @@
-import { Communicator, CommunicatorContext, DBOSInitializer, DBOSResponseError, InitContext, MiddlewareContext, Transaction, TransactionContext, Workflow, WorkflowContext } from "@dbos-inc/dbos-sdk";
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import { Communicator, CommunicatorContext, DBOSResponseError, MiddlewareContext, Transaction, TransactionContext, Workflow, WorkflowContext } from "@dbos-inc/dbos-sdk";
 import Stripe from "stripe";
 import { Knex } from 'knex';
 import axios from 'axios';
@@ -11,6 +12,7 @@ export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.de
 let dbosAuth0Token: string;
 
 export class Utils {
+  // eslint-disable-next-line @typescript-eslint/require-await
   static async userAuthMiddleware(ctxt: MiddlewareContext) {
     ctxt.logger.debug("Request: " + JSON.stringify(ctxt.koaContext.request));
     if (ctxt.requiredRole.length > 0) {
@@ -117,6 +119,7 @@ export class Utils {
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
     const username = 'dbos-cloud-subscription@dbos.dev';
     const password = ctxt.getConfig("DBOS_DEPLOY_PASSWORD") as string;
+    // eslint-disable-next-line no-secrets/no-secrets
     const clientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
     const clientSecret = ctxt.getConfig("DBOS_AUTH0_CLIENT_SECRET") as string;
 

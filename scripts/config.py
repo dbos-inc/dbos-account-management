@@ -22,7 +22,7 @@ class Config:
         if not self.db_name:
             raise Exception('DBOS_APP_DB_NAME not set')
         self.stripe_pro_price = os.environ['STRIPE_DBOS_PRO_PRICE']
-        if self.stripe_pro_price:
+        if not self.stripe_pro_price:
             raise Exception('STRIPE_DBOS_PRO_PRICE not set')
         self.stripe_secret_key = os.environ['STRIPE_SECRET_KEY']
         if not self.stripe_secret_key:

@@ -1,12 +1,6 @@
 name: Deploy Subscription App to Staging
 
 on:
-  pull_request:
-    types:
-      - ready_for_review
-      - opened
-      - reopened
-      - synchronize
   workflow_dispatch:
 
 jobs:

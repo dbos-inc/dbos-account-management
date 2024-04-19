@@ -12,8 +12,11 @@ def test_endpoints(path: str):
     # Register on DBOS Cloud
     run_subprocess(['npx', 'dbos-cloud', 'register', '-u', config.test_username], path, check=False)
     login(path, is_deploy=False) # Login again because register command logs out
-    output = run_subprocess(['npx', 'dbos-cloud', 'db', 'list'], path, check=False)
-    print(output)
+    run_subprocess(['npx', 'dbos-cloud', 'db', 'list'], path, check=True)
+    output = run_subprocess(['npx', 'dbos-cloud', 'db', 'link', 'testlinkdb', '-H', 'localhost', '-W', 'fakepassword'], path, check=False)
+    if not "paying" in output:
+        raise Exception("Free tier check failed")
+    
 
 if __name__ == "__main__":
     login(app_dir, is_deploy=False)

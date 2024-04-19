@@ -18,7 +18,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        npm install @dbos-inc/dbos-cloud@latest
+        npm install @dbos-inc/dbos-cloud@preview
     - name: Test on staging
       run: python3 scripts/staging_test.py
       env:

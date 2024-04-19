@@ -1,6 +1,8 @@
 name: Deploy Subscription App to Staging
 
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:

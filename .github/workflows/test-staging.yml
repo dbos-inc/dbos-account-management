@@ -1,4 +1,4 @@
-name: Deploy Subscription App to Staging
+name: Test Subscription App on Staging
 
 on:
   pull_request:

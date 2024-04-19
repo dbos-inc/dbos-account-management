@@ -15,14 +15,17 @@ class Config:
         self.dbos_test_password = os.environ['DBOS_TEST_PASSWORD']
         if not self.dbos_test_password:
             raise Exception('DBOS_TEST_PASSWORD not set')
-        self.stripe_secret_key = os.environ['STRIPE_SECRET_KEY']
-        if not self.stripe_secret_key:
-            raise Exception('STRIPE_SECRET_KEY not set')
         self.deploy_password = os.environ['DBOS_DEPLOY_PASSWORD']
         if not self.deploy_password:
             raise Exception('DBOS_DEPLOY_PASSWORD not set')
         self.db_name = os.environ['DBOS_APP_DB_NAME']
         if not self.db_name:
             raise Exception('DBOS_APP_DB_NAME not set')
+        self.stripe_pro_price = os.environ['STRIPE_DBOS_PRO_PRICE']
+        if self.stripe_pro_price:
+            raise Exception('STRIPE_DBOS_PRO_PRICE not set')
+        self.stripe_secret_key = os.environ['STRIPE_SECRET_KEY']
+        if not self.stripe_secret_key:
+            raise Exception('STRIPE_SECRET_KEY not set')
 
 config = Config()

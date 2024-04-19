@@ -14,7 +14,8 @@ def test_endpoints(path: str):
     login(path, is_deploy=False) # Login again because register command logs out
     run_subprocess(['npx', 'dbos-cloud', 'db', 'list'], path, check=True)
     output = run_subprocess(['npx', 'dbos-cloud', 'db', 'link', 'testlinkdb', '-H', 'localhost', '-W', 'fakepassword'], path, check=False)
-    if not "paying" in output:
+    # TODO: add a real user subscription status check.
+    if not "database linking is only available for paying users" in output:
         raise Exception("Free tier check failed")
     
 

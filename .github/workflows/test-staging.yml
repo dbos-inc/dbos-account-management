@@ -1,12 +1,15 @@
-name: Deploy Subscription App to Staging
+name: Test Subscription App on Staging
 
 on:
+  schedule:
+    # Runs every six hours
+    - cron: '0 */6 * * *'
   push:
     branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  test:
     runs-on: self-hosted
 
     steps:
@@ -14,12 +17,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        npm ci
-        npm run build
-        npm prune --omit=dev
-        npm install @dbos-inc/dbos-cloud@latest
-    - name: Deploy to staging
-      run: python3 scripts/dbos_deploy.py
+        npm install @dbos-inc/dbos-cloud@preview
+    - name: Test on staging
+      run: python3 scripts/staging_test.py
       env:
         DBOS_DOMAIN: staging.dev.dbos.dev
         DBOS_AUTH0_CLIENT_SECRET: ${{secrets.DBOS_AUTH0_TEST_CLIENT_SECRET}}

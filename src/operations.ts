@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, RequiredRole, KoaMiddleware, Authentication } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
@@ -6,7 +8,6 @@ import { DBOSLoginDomain, stripe, Utils } from './utils';
 export { Utils } from './utils';
 
 const DBOSProPlanString = "dbospro";
-console.log("login domain: " + DBOSLoginDomain);
 const dbosJWT = jwt({
   secret: koaJwtSecret({
     jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
@@ -47,7 +48,7 @@ export class CloudSubscription {
     const authUser = ctxt.authenticatedUser;
     const sessionURL = await ctxt.invoke(Utils).createCheckout(authUser);
     if (!sessionURL) {
-      throw new Error("Failed to create a checkout session!")
+      throw new Error("Failed to create a checkout session!");
     }
     return { url: sessionURL };
   }
@@ -84,16 +85,18 @@ export class StripeWebhook {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.deleted':
-      case 'customer.subscription.updated':
+      case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
         await ctxt.invoke(Utils, event.id).subscriptionWorkflow(subscription.id, subscription.customer as string);
         break;
-      case 'checkout.session.completed':
+      }
+      case 'checkout.session.completed': {
         const checkout = event.data.object as Stripe.Checkout.Session;
         if (checkout.mode === 'subscription') {
           await ctxt.invoke(Utils, event.id).subscriptionWorkflow(checkout.subscription as string, checkout.customer as string);
         }
         break;
+      }
       default:
         ctxt.logger.info(`Unhandled event type ${event.type}`);
     }

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "scripts": {
     "build": "tsc",
-    "test": "npx knex migrate:rollback && npx knex migrate:up && jest",
+    "test": "npx dbos migrate && jest --detectOpenHandles",
     "lint": "eslint src",
     "lint-fix": "eslint --fix src"
   },

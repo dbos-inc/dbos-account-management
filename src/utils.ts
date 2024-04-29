@@ -129,9 +129,9 @@ export class Utils {
       url: `https://${DBOSLoginDomain}/oauth/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       data: new URLSearchParams({
-        grant_type: 'refresh_token',
+        grant_type: "refresh_token",
         client_id: DBOSAuth0ClientID,
-        refresh_token: refreshToken,
+        refresh_token: refreshToken
       }),
     };
     try {

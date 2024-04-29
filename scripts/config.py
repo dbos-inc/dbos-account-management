@@ -22,5 +22,6 @@ class Config:
             raise Exception('STRIPE_SECRET_KEY not set')
         self.test_username = "testsubscription"
         self.deploy_username = "subscribe"
+        self.test_email = "dbos-test-subscription@dbos.dev"
 
 config = Config()

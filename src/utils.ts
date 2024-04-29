@@ -10,7 +10,7 @@ const DBOS_DOMAIN = process.env.DBOS_DOMAIN;
 export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 const DBOS_DEPLOY_REFRESH_TOKEN = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
 // eslint-disable-next-line no-secrets/no-secrets
-const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
+const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
 
 let dbosAuth0Token: string;
 
@@ -120,15 +120,19 @@ export class Utils {
 
   @Communicator({intervalSeconds: 10})  
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
+    const refreshToken = DBOS_DEPLOY_REFRESH_TOKEN;
+    if (!refreshToken) {
+      throw new Error("No refresh token found");
+    }
     const loginRequest = {
       method: 'POST',
       url: `https://${DBOSLoginDomain}/oauth/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: {
-        grant_type: 'refresh_token',
+      data: new URLSearchParams({
+        grant_type: "refresh_token",
         client_id: DBOSAuth0ClientID,
-        refresh_token: DBOS_DEPLOY_REFRESH_TOKEN,
-      }
+        refresh_token: refreshToken
+      }),
     };
     try {
       const response = await axios.request(loginRequest);
@@ -136,7 +140,7 @@ export class Utils {
       dbosAuth0Token = tokenResponse.access_token;
       return dbosAuth0Token;
     } catch (err) {
-      ctxt.logger.error(`Failed to get token: ${(err as Error).message}`);
+      ctxt.logger.error(`Failed to get access token: ${(err as Error).message}`);
       dbosAuth0Token = "";
       throw err;
     }

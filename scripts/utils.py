@@ -20,25 +20,16 @@ def run_subprocess(command, path: str, check: bool = True, silent: bool = False)
     return output
 
 def login(path: str, is_deploy: bool = False):
-    # Perform an automated login using the Resource Owner Password Flow
-    # https://auth0.com/docs/get-started/authentication-and-authorization-flow/resource-owner-password-flow
+    # Automated login using the refresh token
     auth0_domain = 'login.dbos.dev' if config.dbos_domain == 'cloud.dbos.dev' else 'dbos-inc.us.auth0.com'
-    username = config.deploy_email if is_deploy else config.test_email
-    password = config.deploy_password if is_deploy else config.dbos_test_password
-    audience = 'dbos-cloud-api'
     client_id = 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' if config.dbos_domain == 'cloud.dbos.dev' else 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm'
-    client_secret = config.client_secret
+    refresh_token = config.deploy_refresh_token if is_deploy else config.test_refresh_token
 
     url = f'https://{auth0_domain}/oauth/token'
-
     data = {
-        'grant_type': 'password',
-        'username': username,
-        'password': password,
-        'audience': audience,
-        'scope': 'read:sample',
+        'grant_type': 'refresh_token',
         'client_id': client_id,
-        'client_secret': client_secret
+        'refresh_token': refresh_token
     }
 
     headers = {

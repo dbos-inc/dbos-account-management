@@ -8,6 +8,9 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 const DBOS_DOMAIN = process.env.DBOS_DOMAIN;
 export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
+const DBOS_DEPLOY_REFRESH_TOKEN = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
+// eslint-disable-next-line no-secrets/no-secrets
+const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
 
 let dbosAuth0Token: string;
 
@@ -117,29 +120,19 @@ export class Utils {
 
   @Communicator({intervalSeconds: 10})  
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
-    const username = 'dbos-cloud-subscription@dbos.dev';
-    const password = ctxt.getConfig("DBOS_DEPLOY_PASSWORD") as string;
-    // eslint-disable-next-line no-secrets/no-secrets
-    const clientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
-    const clientSecret = ctxt.getConfig("DBOS_AUTH0_CLIENT_SECRET") as string;
-
     const loginRequest = {
       method: 'POST',
       url: `https://${DBOSLoginDomain}/oauth/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: new URLSearchParams({
-        grant_type: 'password',
-        username: username,
-        password: password,
-        audience: 'dbos-cloud-api',
-        client_id: clientID,
-        client_secret: clientSecret,
-        scope: 'read:sample',
-      })
+      data: {
+        grant_type: 'refresh_token',
+        client_id: DBOSAuth0ClientID,
+        refresh_token: DBOS_DEPLOY_REFRESH_TOKEN,
+      }
     };
     try {
       const response = await axios.request(loginRequest);
-      const tokenResponse = response.data as TokenResponse;
+      const tokenResponse = response.data as RefreshTokenAuthResponse;
       dbosAuth0Token = tokenResponse.access_token;
       return dbosAuth0Token;
     } catch (err) {
@@ -206,10 +199,11 @@ export class Utils {
   }
 }
 
-interface TokenResponse {
+interface RefreshTokenAuthResponse {
   access_token: string;
-  token_type: string;
+  scope: string;
   expires_in: number;
+  token_type: string;
 }
 
 interface dbos_subscriptions {

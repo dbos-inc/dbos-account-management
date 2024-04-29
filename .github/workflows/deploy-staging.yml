@@ -22,10 +22,9 @@ jobs:
       run: python3 scripts/dbos_deploy.py
       env:
         DBOS_DOMAIN: staging.dev.dbos.dev
-        DBOS_AUTH0_CLIENT_SECRET: ${{secrets.DBOS_AUTH0_TEST_CLIENT_SECRET}}
-        DBOS_DEPLOY_PASSWORD: ${{secrets.DBOS_CLOUD_SUBSCRIPTION_PASSWORD}}
         DBOS_APP_DB_NAME: testsubscription
         STRIPE_SECRET_KEY: ${{secrets.STRIPE_TEST_SECRET_KEY}}
         STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_TEST_WEBHOOK_SECRET}}
         STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_TEST_PRO_PRICE}}
-        DBOS_TEST_PASSWORD: ${{secrets.DBOS_TEST_PASSWORD}}
+        DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
+        DBOS_TEST_REFRESH_TOKEN: ${{secrets.DBOS_TEST_TEST_REFRESH_TOKEN}}

@@ -1,4 +1,5 @@
 # This script is used to automatically deploy this subscription app to DBOS Cloud
+import json
 import os
 import time
 from utils import (login, run_subprocess)
@@ -15,11 +16,10 @@ def test_endpoints(path: str):
     run_subprocess(['npx', 'dbos-cloud', 'register', '-u', config.test_username], path, check=False)
     login(path, is_deploy=False) # Login again because register command logs out
 
-    # Test database linking, should fail because we're free user
-    run_subprocess(['npx', 'dbos-cloud', 'db', 'list'], path, check=True)
-    output = run_subprocess(['npx', 'dbos-cloud', 'db', 'link', 'testlinkdb', '-H', 'localhost', '-W', 'fakepassword'], path, check=False)
-    # TODO: add a real user subscription status check.
-    if not "database linking is only available for paying users" in output:
+    # Retrieve user profile, should be free plan
+    output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
+    json_data = json.loads(output)
+    if json_data['SubscriptionPlan'] != "free":
         raise Exception("Free tier check failed")
 
     # Look up customer ID
@@ -34,21 +34,18 @@ def test_endpoints(path: str):
         items=[{"price": config.stripe_pro_price}],
     )
 
-    # Now test linking a database should fail with a different message
-    # TODO: better check
-    time.sleep(5) # Wait for subscription to take effect
-    output = run_subprocess(['npx', 'dbos-cloud', 'db', 'link', 'testlinkdb', '-H', 'localhost', '-W', 'fakepassword'], path, check=False)
-    if not "failed to connect to linked database" in output:
+    time.sleep(30) # Wait for subscription to take effect
+    output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
+    json_data = json.loads(output)
+    if json_data['SubscriptionPlan'] != "pro":
         raise Exception("Pro tier check failed")
 
     # Cancel the subscription and check we're free tier again
     stripe.Subscription.cancel(subscription.id)
-    time.sleep(5) # Wait for subscription to take effect
-    # Test database linking, should fail because we're free user
-    run_subprocess(['npx', 'dbos-cloud', 'db', 'list'], path, check=True)
-    output = run_subprocess(['npx', 'dbos-cloud', 'db', 'link', 'testlinkdb', '-H', 'localhost', '-W', 'fakepassword'], path, check=False)
-    # TODO: add a real user subscription status check.
-    if not "database linking is only available for paying users" in output:
+    time.sleep(30) # Wait for subscription to take effect
+    output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
+    json_data = json.loads(output)
+    if json_data['SubscriptionPlan'] != "free":
         raise Exception("Free tier check failed")
 
 if __name__ == "__main__":

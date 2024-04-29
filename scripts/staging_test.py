@@ -28,10 +28,13 @@ def test_endpoints(path: str):
         raise Exception("No Stripe customer found for test email")
     customer_id = customers.data[0].id
     
-    # Create a subscription that uses the default test payment
+    # Create a subscription that sets a trial that ends in 1 day.
     subscription = stripe.Subscription.create(
         customer=customer_id,
         items=[{"price": config.stripe_pro_price}],
+        trial_from_plan=True,
+        trial_period_days=1,
+        trial_settings={"end_behavior": "cancel"},
     )
 
     time.sleep(30) # Wait for subscription to take effect

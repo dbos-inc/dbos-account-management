@@ -10,7 +10,7 @@ const DBOS_DOMAIN = process.env.DBOS_DOMAIN;
 export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 const DBOS_DEPLOY_REFRESH_TOKEN = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
 // eslint-disable-next-line no-secrets/no-secrets
-const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? 'LJlSE9iqRBPzeonar3LdEad7zdYpwKsW' : 'XPMrfZwUL6O8VZjc4XQWEUHORbT1ykUm';
+const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
 
 let dbosAuth0Token: string;
 

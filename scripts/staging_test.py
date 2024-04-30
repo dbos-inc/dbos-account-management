@@ -32,7 +32,6 @@ def test_endpoints(path: str):
     subscription = stripe.Subscription.create(
         customer=customer_id,
         items=[{"price": config.stripe_pro_price}],
-        trial_from_plan=True,
         trial_period_days=1,
         trial_settings={"end_behavior": "cancel"},
     )

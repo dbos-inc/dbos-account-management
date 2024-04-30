@@ -223,9 +223,14 @@ export class Utils {
 
   static verifyStripeEvent(payload: string, sigHeader: unknown) {
     if (typeof sigHeader !== 'string') {
-      throw new Error("Invalid stripe request, no stripe-signature header");
+      throw new DBOSResponseError("Invalid stripe request, no stripe-signature header", 400);
     }
-    const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+    } catch (err) {
+      throw new DBOSResponseError("Unable to verify event from Stripe", 400);
+    }
     return event;
   }
 

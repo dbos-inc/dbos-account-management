@@ -54,13 +54,7 @@ export class StripeWebhook {
   static async stripeWebhook(ctxt: HandlerContext) {
     // Verify the request is actually from Stripe.
     const req = ctxt.koaContext.request;
-    let event: Stripe.Event;
-    try {
-      event = Utils.verifyStripeEvent(req.rawBody as string, req.headers['stripe-signature']);
-    } catch (err) {
-      ctxt.logger.error(err);
-      throw new DBOSResponseError("Unable to verify event from Stripe", 400);
-    }
+    const event = Utils.verifyStripeEvent(req.rawBody as string, req.headers['stripe-signature']);
 
     // Invoke the workflow asynchronously and quickly response to Stripe.
     // Use event.id as the workflow idempotency key to guarantee exactly once processing.

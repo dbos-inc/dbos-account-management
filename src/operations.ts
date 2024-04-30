@@ -8,6 +8,7 @@ import { DBOSLoginDomain, stripe, Utils } from './utils';
 export { Utils } from './utils';
 
 const DBOSProPlanString = "dbospro";
+const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const auth0JwtVerifier = jwt({
   secret: koaJwtSecret({
     jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
@@ -63,10 +64,10 @@ export class StripeWebhook {
     const payload: string = req.rawBody;
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(payload, sigHeader, ctxt.getConfig("STRIPE_WEBHOOK_SECRET") as string);
+      event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
     } catch (err) {
       ctxt.logger.error(err);
-      throw new DBOSResponseError("Webhook Error", 400);
+      throw new DBOSResponseError("Unable to verify event from Stripe", 400);
     }
 
     // Fetch auth0 credential every 12 hours.

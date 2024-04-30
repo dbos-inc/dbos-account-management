@@ -15,13 +15,12 @@ database:
     - npx knex migrate:latest
   rollback:
     - npx knex migrate:rollback
-application:
-  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
 env:
   DBOS_DOMAIN: ${DBOS_DOMAIN}
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
   DBOS_DEPLOY_REFRESH_TOKEN: ${DBOS_DEPLOY_REFRESH_TOKEN}
   STRIPE_DBOS_PRO_PRICE: ${STRIPE_DBOS_PRO_PRICE}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
 http:
   cors_middleware: true
   credentials: true

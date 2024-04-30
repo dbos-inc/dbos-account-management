@@ -4,13 +4,24 @@ import request from "supertest";
 
 describe("cors-tests", () => {
   let testRuntime: TestingRuntime;
+  const auth0TestID = "testauth0123";
+  const stripeTestID = "teststripe123";
+  const testEmail = "testemail@dbos.dev";
 
   beforeAll(async () => {
     testRuntime = await createTestingRuntime([CloudSubscription, Utils]);
+    await testRuntime.queryUserDB(`DELETE FROM accounts WHERE auth0_subject_id='${auth0TestID}';`);
   });
 
   afterAll(async () => {
     await testRuntime.destroy();
+  });
+
+  test("account-management", async () => {
+    // Check our transactions are correct
+    await expect(testRuntime.invoke(Utils).recordStripeCustomer(auth0TestID, stripeTestID, testEmail)).resolves.toBeFalsy(); // No error
+    await expect(testRuntime.invoke(Utils).findStripeCustomerID(auth0TestID)).resolves.toBe(stripeTestID);
+    await expect(testRuntime.invoke(Utils).findAuth0UserID(stripeTestID)).resolves.toBe(auth0TestID);
   });
 
   test("subscribe-cors", async () => {

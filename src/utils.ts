@@ -34,13 +34,42 @@ export class Utils {
     }
   }
 
-  @Communicator({intervalSeconds: 10, maxAttempts: 2})
-  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerID,
-      return_url: 'https://dbos.dev'
-    });
-    return session.url;
+  @Workflow()
+  static async stripeWebhookWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
+    // Check subscription from stripe and only active the account if plan is active.
+    const dbosAuthID = await ctxt.invoke(Utils).findAuth0UserID(customerID);
+    if (!dbosAuthID) {
+      throw new Error(`Cannot find auth0 user for stripe customer ${customerID}`);
+    }
+    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
+    if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
+      ctxt.logger.info(`Subscription ${subscriptionID} is incomplete. Do nothing.`);
+      return;
+    } else if (subscription.status === 'active' && subscription.price === DBOSProStripePrice) {
+      ctxt.logger.info(`Subscription ${subscriptionID} is active for user ${dbosAuthID}`);
+      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
+    } else if (subscription.status === 'canceled' && subscription.price === DBOSProStripePrice) {
+      ctxt.logger.info(`Subscription ${subscriptionID} is canceled for user ${dbosAuthID}`);
+      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
+    } else {
+      ctxt.logger.warn(`Unknown subscription status: ${subscription.status}; or price: ${subscription.price}; user ${dbosAuthID}`);
+    }
+  }
+
+  @Workflow()
+  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
+    // First, look up the customer from the accounts table
+    let stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
+
+    // If customer is not found, create a new customer in stripe, and record in our database
+    if (!stripeCustomerID) {
+      stripeCustomerID = await ctxt.invoke(Utils).createStripeCustomer(auth0UserID, userEmail);
+      await ctxt.invoke(Utils).recordStripeCustomer(auth0UserID, stripeCustomerID, userEmail);
+    }
+
+    // Finally, create a Stripe subscription.
+    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
+    return res;
   }
 
   @Workflow()
@@ -54,23 +83,9 @@ export class Utils {
     return sessionURL;
   }
 
-  @Communicator({intervalSeconds: 10})
-  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
-    const session = await stripe.checkout.sessions.create({
-      customer: stripeCustomerID,
-      billing_address_collection: 'auto',
-      line_items: [
-        {
-          price: DBOSProStripePrice,
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      success_url: `https://docs.dbos.dev`,
-      cancel_url: `https://www.dbos.dev/pricing`,
-    });
-    return session.url;
-  }
+  /**
+   * Transactions managing user accounts
+   */
 
   @Transaction({readOnly: true})
   static async findStripeCustomerID(ctxt: TransactionContext<Knex>, auth0UserID: string): Promise<string|undefined> {
@@ -110,6 +125,37 @@ export class Utils {
     }
   }
 
+  /**
+   * Communicators interacting with Stripe
+   */
+
+  @Communicator({intervalSeconds: 10, maxAttempts: 2})
+  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerID,
+      return_url: 'https://dbos.dev'
+    });
+    return session.url;
+  }
+
+  @Communicator({intervalSeconds: 10})
+  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
+    const session = await stripe.checkout.sessions.create({
+      customer: stripeCustomerID,
+      billing_address_collection: 'auto',
+      line_items: [
+        {
+          price: DBOSProStripePrice,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `https://docs.dbos.dev`,
+      cancel_url: `https://www.dbos.dev/pricing`,
+    });
+    return session.url;
+  }
+
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
   static async createStripeCustomer(ctxt: CommunicatorContext, auth0UserID: string, userEmail: string): Promise<string> {
     const customer = await stripe.customers.create({
@@ -123,22 +169,6 @@ export class Utils {
     return customer.id;
   }
 
-  @Workflow()
-  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
-    // First, look up the customer from the accounts table
-    let stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
-
-    // If customer is not found, create a new customer in stripe, and record in our database
-    if (!stripeCustomerID) {
-      stripeCustomerID = await ctxt.invoke(Utils).createStripeCustomer(auth0UserID, userEmail);
-      await ctxt.invoke(Utils).recordStripeCustomer(auth0UserID, stripeCustomerID, userEmail);
-    }
-
-    // Finally, create a Stripe subscription.
-    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
-    return res;
-  }
-
   @Communicator()
   static async retrieveSubscription(_ctxt: CommunicatorContext, subscriptionID: string): Promise<StripeSubscription> {
     const subscription = await stripe.subscriptions.retrieve(subscriptionID);
@@ -150,6 +180,9 @@ export class Utils {
     };
   }
 
+  /**
+   * Communicators interacting with DBOS Cloud
+   */
 
   @Communicator({intervalSeconds: 10})  
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
@@ -206,28 +239,6 @@ export class Utils {
     } catch (err) {
       ctxt.logger.error(`Failed to update entitlement: ${(err as Error).message}`);
       throw err;
-    }
-  }
-
-  @Workflow()
-  static async subscriptionWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
-    // Check subscription from stripe and only active the account if plan is active.
-    const dbosAuthID = await ctxt.invoke(Utils).findAuth0UserID(customerID);
-    if (!dbosAuthID) {
-      throw new Error(`Cannot find auth0 user for stripe customer ${customerID}`);
-    }
-    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
-    if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
-      ctxt.logger.info(`Subscription ${subscriptionID} is incomplete. Do nothing.`);
-      return;
-    } else if (subscription.status === 'active' && subscription.price === DBOSProStripePrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is active for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
-    } else if (subscription.status === 'canceled' && subscription.price === DBOSProStripePrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is canceled for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
-    } else {
-      ctxt.logger.warn(`Unknown subscription status: ${subscription.status}; or price: ${subscription.price}; user ${dbosAuthID}`);
     }
   }
 }

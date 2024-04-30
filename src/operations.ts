@@ -8,7 +8,7 @@ import { DBOSLoginDomain, stripe, Utils } from './utils';
 export { Utils } from './utils';
 
 const DBOSProPlanString = "dbospro";
-const dbosJWT = jwt({
+const auth0JwtVerifier = jwt({
   secret: koaJwtSecret({
     jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
     cache: true,
@@ -22,7 +22,7 @@ let lastTokenFetch = 0;
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
 @Authentication(Utils.userAuthMiddleware)
-@KoaMiddleware(dbosJWT)
+@KoaMiddleware(auth0JwtVerifier)
 export class CloudSubscription {
   @RequiredRole(['user'])
   @PostApi('/subscribe')
@@ -90,13 +90,13 @@ export class StripeWebhook {
       case 'customer.subscription.deleted':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
-        await ctxt.invoke(Utils, event.id).subscriptionWorkflow(subscription.id, subscription.customer as string);
+        await ctxt.invoke(Utils, event.id).stripeWebhookWorkflow(subscription.id, subscription.customer as string);
         break;
       }
       case 'checkout.session.completed': {
         const checkout = event.data.object as Stripe.Checkout.Session;
         if (checkout.mode === 'subscription') {
-          await ctxt.invoke(Utils, event.id).subscriptionWorkflow(checkout.subscription as string, checkout.customer as string);
+          await ctxt.invoke(Utils, event.id).stripeWebhookWorkflow(checkout.subscription as string, checkout.customer as string);
         }
         break;
       }

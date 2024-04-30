@@ -33,7 +33,7 @@ def test_endpoints(path: str):
         customer=customer_id,
         items=[{"price": config.stripe_pro_price}],
         trial_period_days=1,
-        trial_settings={"end_behavior": "cancel"},
+        trial_settings={"end_behavior": {"missing_payment_method": "cancel"}},
     )
 
     time.sleep(30) # Wait for subscription to take effect

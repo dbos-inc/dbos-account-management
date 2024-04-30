@@ -11,46 +11,133 @@ export const DBOSLoginDomain = DBOS_DOMAIN === "cloud.dbos.dev" ? "login.dbos.de
 const DBOS_DEPLOY_REFRESH_TOKEN = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
 // eslint-disable-next-line no-secrets/no-secrets
 const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
-
-let dbosAuth0Token: string;
+const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
+const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
 export class Utils {
   // eslint-disable-next-line @typescript-eslint/require-await
   static async userAuthMiddleware(ctxt: MiddlewareContext) {
-    ctxt.logger.debug("Request: " + JSON.stringify(ctxt.koaContext.request));
     if (ctxt.requiredRole.length > 0) {
       if (!ctxt.koaContext.state.user) {
         throw new DBOSResponseError("No authenticated DBOS User!", 401);
       }
-      ctxt.logger.debug(ctxt.koaContext.state.user);
       const authenticatedUser = ctxt.koaContext.state.user["sub"] as string;
       if (!authenticatedUser) {
         throw new DBOSResponseError("No valid DBOS user found!", 401);
+      }
+      const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
+      if (!userEmail) {
+        throw new DBOSResponseError("No email found for the authenticated user", 400);
       }
       return { authenticatedRoles: ['user'], authenticatedUser: authenticatedUser };
     }
   }
 
-  @Communicator()  
-  static async retrieveStripeCustomer(ctxt: CommunicatorContext, authUser: string): Promise<string> {
-    // Look up customer from stripe
-    const customers = await stripe.customers.search({
-      query: `metadata["auth0_user_id"]:"${authUser}"`,
-    });
-
-    let customerID = "";
-    if (customers.data.length === 1) {
-      customerID = customers.data[0].id;
-    } else {
-      ctxt.logger.error(`Failed to look up customer from stripe: ${customers.data.length}`);
-      throw new DBOSResponseError("Failed to look up customer from stripe", 400);
+  @Workflow()
+  static async stripeWebhookWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
+    // Retrieve the updated subscription from Stripe
+    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
+    if (subscription.price !== DBOSProStripePrice) {
+      throw new Error(`Unknown price: ${subscription.price}; customer ${customerID}; subscription ${subscriptionID}`);
     }
-    return customerID;
+
+    // Map the Stripe customer ID to DBOS Cloud user ID
+    const dbosAuthID = await ctxt.invoke(Utils).findAuth0UserID(customerID);
+    if (!dbosAuthID) {
+      throw new Error(`Cannot find auth0 user for stripe customer ${customerID}`);
+    }
+
+    // Send a request to the DBOS Cloud admin API to change the user's subscription status.
+    switch (subscription.status) {
+      case 'active':
+      case 'trialing':
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
+        break;
+      case 'canceled':
+      case 'unpaid':
+      case 'paused':
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
+        break;
+      default:
+        ctxt.logger.info(`Do nothing for ${subscription.status} status.`);
+    }
   }
 
-  @Communicator()
-  static async createPortal(ctxt: CommunicatorContext, authUser: string): Promise<string> {
-    const customerID = await Utils.retrieveStripeCustomer(ctxt, authUser); // Directly invoke another communicator
+  @Workflow()
+  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
+    // First, look up the customer from the accounts table
+    let stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
+
+    // If customer is not found, create a new customer in stripe, and record in our database
+    if (!stripeCustomerID) {
+      stripeCustomerID = await ctxt.invoke(Utils).createStripeCustomer(auth0UserID, userEmail);
+      await ctxt.invoke(Utils).recordStripeCustomer(auth0UserID, stripeCustomerID, userEmail);
+    }
+
+    // Finally, create a Stripe subscription.
+    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
+    return res;
+  }
+
+  @Workflow()
+  static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string): Promise<string|null> {
+    const stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
+    if (!stripeCustomerID) {
+      ctxt.logger.error(`Cannot find stripe customer for user ${auth0UserID}`);
+      return null;
+    }
+    const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID);
+    return sessionURL;
+  }
+
+  /**
+   * Transactions managing user accounts
+   */
+
+  @Transaction({readOnly: true})
+  static async findStripeCustomerID(ctxt: TransactionContext<Knex>, auth0UserID: string): Promise<string|undefined> {
+    const client = ctxt.client;
+    const res = await client<Accounts>("accounts")
+      .select("stripe_customer_id")
+      .where("auth0_subject_id", auth0UserID).first();
+    if (!res) {
+      return undefined;
+    }
+    return res.stripe_customer_id;
+  }
+
+  @Transaction({readOnly: true})
+  static async findAuth0UserID(ctxt: TransactionContext<Knex>, stripeCustomerID: string): Promise<string|undefined> {
+    const client = ctxt.client;
+    const res = await client<Accounts>("accounts")
+      .select("auth0_subject_id")
+      .where("stripe_customer_id", stripeCustomerID).first();
+    if (!res) {
+      return undefined;
+    }
+    return res.auth0_subject_id;
+  }
+
+  @Transaction()
+  static async recordStripeCustomer(ctxt: TransactionContext<Knex>, auth0UserID: string, stripeCustomerID: string, email: string): Promise<void> {
+    const client = ctxt.client;
+    const res = await client<Accounts>("accounts")
+      .insert<{ rowCount: number }>({
+        auth0_subject_id: auth0UserID,
+        stripe_customer_id: stripeCustomerID,
+        email: email,
+      }).onConflict("auth0_subject_id").ignore();
+    if (res.rowCount !== 1) {
+      throw new Error(`Failed to record stripe customer ${stripeCustomerID} for user ${auth0UserID}`);
+    }
+  }
+
+  /**
+   * Communicators interacting with Stripe
+   */
+
+  @Communicator({intervalSeconds: 10, maxAttempts: 2})
+  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
     const session = await stripe.billingPortal.sessions.create({
       customer: customerID,
       return_url: 'https://dbos.dev'
@@ -58,41 +145,41 @@ export class Utils {
     return session.url;
   }
 
-  @Communicator()
-  static async createCheckout(ctxt: CommunicatorContext, authUser: string): Promise<string|null> {
-    const customerID = await Utils.retrieveStripeCustomer(ctxt, authUser); // Directly invoke another communicator
-    const prices = await stripe.prices.retrieve(ctxt.getConfig("STRIPE_DBOS_PRO_PRICE") as string);
-      const session = await stripe.checkout.sessions.create({
-        customer: customerID,
-        billing_address_collection: 'auto',
-        line_items: [
-          {
-            price: prices.id,
-            quantity: 1,
-          },
-        ],
-        mode: 'subscription',
-        success_url: `https://docs.dbos.dev`,
-        cancel_url: `https://www.dbos.dev/pricing`,
-      });
-      return session.url;
+  @Communicator({intervalSeconds: 10})
+  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
+    const session = await stripe.checkout.sessions.create({
+      customer: stripeCustomerID,
+      billing_address_collection: 'auto',
+      line_items: [
+        {
+          price: DBOSProStripePrice,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `https://docs.dbos.dev`,
+      cancel_url: `https://www.dbos.dev/pricing`,
+    });
+    return session.url;
   }
 
-  // Find the Auth0 user info from stripe customer
-  @Communicator()
-  static async findAuth0User(ctxt: CommunicatorContext, customerID: string): Promise<string> {
-    const customer = await stripe.customers.retrieve(customerID) as Stripe.Customer;
-    const dbosAuthID = customer.metadata["auth0_user_id"];
-    if (!dbosAuthID) {
-      ctxt.logger.error(`Cannot find DBOS Auth ID from ${customerID}`);
-      throw new Error(`Cannot find DBOS Auth ID for customer ${customerID}`);
-    }
-    return dbosAuthID;
+  @Communicator({intervalSeconds: 10, maxAttempts: 2})
+  static async createStripeCustomer(ctxt: CommunicatorContext, auth0UserID: string, userEmail: string): Promise<string> {
+    const customer = await stripe.customers.create({
+      email: userEmail,
+      description: "Automatically generated by DBOS",
+      metadata: {
+        auth0_user_id: auth0UserID,
+      },
+    });
+    ctxt.logger.info(`Created stripe customer ${customer.id} for user ${auth0UserID}`);
+    return customer.id;
   }
 
   @Communicator()
   static async retrieveSubscription(ctxt: CommunicatorContext, subscriptionID: string): Promise<StripeSubscription> {
     const subscription = await stripe.subscriptions.retrieve(subscriptionID);
+    ctxt.logger.info(`Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string}`);
     return {
       id: subscriptionID,
       customer: subscription.customer as string,
@@ -101,23 +188,11 @@ export class Utils {
     };
   }
 
-  @Transaction()
-  static async updateDBRecord(ctxt: TransactionContext<Knex>, dbosAuthID: string, stripeCustomerID: string, plan: string): Promise<boolean>{
-    const check = `SELECT dbos_plan FROM subscriptions WHERE auth0_user_id = ?`;
-    const { rows } = await ctxt.client.raw(check, [dbosAuthID]) as { rows: dbos_subscriptions[]};
-    if (rows.length > 0) {
-      const currentPlan = rows[0].dbos_plan;
-      if (currentPlan === plan) {
-        ctxt.logger.info(`User ${dbosAuthID} already has plan ${plan}`);
-        return false;
-      }
-    }
-    // Use knex to upsert into subscriptions table.
-    const query = `INSERT INTO subscriptions (auth0_user_id, stripe_customer_id, dbos_plan, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (auth0_user_id) DO UPDATE SET dbos_plan = EXCLUDED.dbos_plan, updated_at = EXCLUDED.updated_at`;
-    await ctxt.client.raw(query, [dbosAuthID, stripeCustomerID, plan, Date.now()]);
-    return true;
-  }
-
+  /**
+   * Communicators interacting with DBOS Cloud
+   */
+  static dbosAuth0Token: string|undefined;
+  static lastTokenFetch = 0;
   @Communicator({intervalSeconds: 10})  
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
     const refreshToken = DBOS_DEPLOY_REFRESH_TOKEN;
@@ -128,33 +203,50 @@ export class Utils {
       method: 'POST',
       url: `https://${DBOSLoginDomain}/oauth/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: new URLSearchParams({
+      data: {
         grant_type: "refresh_token",
         client_id: DBOSAuth0ClientID,
         refresh_token: refreshToken
-      }),
+      },
     };
     try {
       const response = await axios.request(loginRequest);
       const tokenResponse = response.data as RefreshTokenAuthResponse;
-      dbosAuth0Token = tokenResponse.access_token;
-      return dbosAuth0Token;
+      Utils.dbosAuth0Token = tokenResponse.access_token;
+      return tokenResponse.access_token;
     } catch (err) {
       ctxt.logger.error(`Failed to get access token: ${(err as Error).message}`);
-      dbosAuth0Token = "";
+      Utils.dbosAuth0Token = undefined;
       throw err;
     }
   }
 
-  @Communicator({intervalSeconds: 10})
+  static verifyStripeEvent(payload: string, sigHeader: unknown) {
+    if (typeof sigHeader !== 'string') {
+      throw new DBOSResponseError("Invalid stripe request, no stripe-signature header", 400);
+    }
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+    } catch (err) {
+      throw new DBOSResponseError("Unable to verify event from Stripe", 400);
+    }
+    return event;
+  }
+
+  // This will retry the request every 10 seconds, up to 20 times, with a backoff rate of 1.2
+  @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2})
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
-    // Obtain cloud credentials
-    let token = dbosAuth0Token;
-    if (!token) {
+    let token = Utils.dbosAuth0Token;
+    const ts = Date.now();
+    // Fetch auth0 credential every 12 hours.
+    // TODO: use cron job.
+    if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
       token = await Utils.retrieveCloudCredential(ctxt);
+      Utils.lastTokenFetch = ts;
     }
 
-    // Update the entitlement in DBOS Cloud
+    // Update the user's subscription status in DBOS Cloud
     const entitlementRequest = {
       method: 'POST',
       url: `https://${DBOS_DOMAIN}/admin/v1alpha1/users/update-sub`,
@@ -169,36 +261,10 @@ export class Utils {
     };
     try {
       const response = await axios.request(entitlementRequest);
-      ctxt.logger.info(`Update entitlement response: ${response.status}`);
+      ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
     } catch (err) {
-      ctxt.logger.error(`Failed to update entitlement: ${(err as Error).message}`);
+      ctxt.logger.error(`Failed to update ${dbosAuthID} to ${plan}: ${(err as Error).message}`);
       throw err;
-    }
-  }
-
-  @Workflow()
-  static async subscriptionWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
-    // Check subscription from stripe and only active the account if plan is active.
-    const proPrice = ctxt.getConfig("STRIPE_DBOS_PRO_PRICE") as string;
-    const dbosAuthID = await ctxt.invoke(Utils).findAuth0User(customerID);
-    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
-    if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
-      ctxt.logger.info(`Subscription ${subscriptionID} is incomplete. Do nothing.`);
-      return;
-    } else if (subscription.status === 'active' && subscription.price === proPrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is active for user ${dbosAuthID}`);
-      const needUpdate = await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'pro');
-      if (needUpdate) {
-        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
-      }
-    } else if (subscription.status === 'canceled' && subscription.price === proPrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is canceled for user ${dbosAuthID}`);
-      const needUpdate = await ctxt.invoke(Utils).updateDBRecord(dbosAuthID, customerID, 'free');
-      if (needUpdate) {
-        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
-      }
-    } else {
-      ctxt.logger.warn(`Unknown subscription status: ${subscription.status}; or price: ${subscription.price}; user ${dbosAuthID}`);
     }
   }
 }
@@ -210,10 +276,10 @@ interface RefreshTokenAuthResponse {
   token_type: string;
 }
 
-interface dbos_subscriptions {
-  auth0_user_id: string;
+interface Accounts {
+  auth0_subject_id: string;
+  email: string;
   stripe_customer_id: string;
-  dbos_plan: string;
   created_at: number;
   updated_at: number;
 }

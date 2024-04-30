@@ -2,7 +2,9 @@
 import json
 import os
 import time
-from utils import (login, run_subprocess)
+
+import requests
+from utils import (login, run_subprocess, get_credentials)
 from config import config
 import stripe
 
@@ -22,16 +24,41 @@ def test_endpoints(path: str):
     if json_data['SubscriptionPlan'] != "free":
         raise Exception("Free tier check failed")
 
+    # Test the subscribe endpoint
+    credentials = get_credentials(path)
+    token = credentials['token']
+    url = f"https://subscribe-dbos.{config.dbos_domain}/subscribe"
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'plan': 'dbospro'
+    }
+    res = requests.post(url, headers=headers, data=json.dumps(data))
+    assert res.status_code == 200, f"Cloud subscribe endpoint failed: {res.status_code} - {res.text}"
+
+    # Test customer portal endpoint
+    url = f"https://subscribe-dbos.{config.dbos_domain}/create-customer-portal"
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    res = requests.post(url, headers=headers)
+    assert res.status_code == 200, f"Cloud create-customer-portal endpoint failed: {res.status_code} - {res.text}"
+
     # Look up customer ID
     customers = stripe.Customer.list(email=config.test_email, limit=1)
     if len(customers) == 0:
         raise Exception("No Stripe customer found for test email")
     customer_id = customers.data[0].id
     
-    # Create a subscription that uses the default test payment
+    # Create a subscription that sets a trial that ends in 1 day.
     subscription = stripe.Subscription.create(
         customer=customer_id,
         items=[{"price": config.stripe_pro_price}],
+        trial_period_days=1,
+        trial_settings={"end_behavior": {"missing_payment_method": "cancel"}},
     )
 
     time.sleep(30) # Wait for subscription to take effect

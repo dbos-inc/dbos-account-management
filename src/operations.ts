@@ -4,11 +4,10 @@ import { HandlerContext, ArgSource, ArgSources, PostApi, DBOSResponseError, Requ
 import Stripe from 'stripe';
 import jwt from "koa-jwt";
 import { koaJwtSecret } from "jwks-rsa";
-import { DBOSLoginDomain, stripe, Utils } from './utils';
+import { DBOSLoginDomain, Utils } from './utils';
 export { Utils } from './utils';
 
 const DBOSProPlanString = "dbospro";
-const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const auth0JwtVerifier = jwt({
   secret: koaJwtSecret({
     jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
@@ -19,7 +18,6 @@ const auth0JwtVerifier = jwt({
   issuer: `https://${DBOSLoginDomain}/`,
   audience: 'dbos-cloud-api'
 });
-let lastTokenFetch = 0;
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
 @Authentication(Utils.userAuthMiddleware)
@@ -54,37 +52,18 @@ export class CloudSubscription {
 export class StripeWebhook {
   @PostApi('/stripe_webhook')
   static async stripeWebhook(ctxt: HandlerContext) {
-    // Make sure the request is actually from Stripe.
+    // Verify the request is actually from Stripe.
     const req = ctxt.koaContext.request;
-    const sigHeader = req.headers['stripe-signature'];
-    if (typeof sigHeader !== 'string') {
-      throw new DBOSResponseError("Invalid stripe request", 400);
-    }
-
-    const payload: string = req.rawBody;
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+      event = Utils.verifyStripeEvent(req.rawBody as string, req.headers['stripe-signature']);
     } catch (err) {
       ctxt.logger.error(err);
       throw new DBOSResponseError("Unable to verify event from Stripe", 400);
     }
 
-    // Fetch auth0 credential every 12 hours.
-    // TODO: use cron job.
-    try {
-      const ts = Date.now();
-      if ((ts - lastTokenFetch) > 43200000) {
-        await ctxt.invoke(Utils).retrieveCloudCredential();
-        lastTokenFetch = ts;
-      }
-    } catch (err) {
-      ctxt.logger.error(err);
-    }
-
-    // Handle the event.
-    // Use event ID as the idempotency key for the workflow, making sure once-and-only-once execution.
-    // Invoke the workflow but don't wait for it to finish. Fast response to Stripe.
+    // Invoke the workflow asynchronously and quickly response to Stripe.
+    // Use event.id as the workflow idempotency key to guarantee exactly once processing.
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.deleted':

@@ -12,8 +12,7 @@ const DBOS_DEPLOY_REFRESH_TOKEN = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
 // eslint-disable-next-line no-secrets/no-secrets
 const DBOSAuth0ClientID = DBOS_DOMAIN === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
 const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
-
-let dbosAuth0Token: string;
+const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
 export class Utils {
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -192,7 +191,8 @@ export class Utils {
   /**
    * Communicators interacting with DBOS Cloud
    */
-
+  static dbosAuth0Token: string|undefined;
+  static lastTokenFetch = 0;
   @Communicator({intervalSeconds: 10})  
   static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
     const refreshToken = DBOS_DEPLOY_REFRESH_TOKEN;
@@ -212,22 +212,33 @@ export class Utils {
     try {
       const response = await axios.request(loginRequest);
       const tokenResponse = response.data as RefreshTokenAuthResponse;
-      dbosAuth0Token = tokenResponse.access_token;
-      return dbosAuth0Token;
+      Utils.dbosAuth0Token = tokenResponse.access_token;
+      return tokenResponse.access_token;
     } catch (err) {
       ctxt.logger.error(`Failed to get access token: ${(err as Error).message}`);
-      dbosAuth0Token = "";
+      Utils.dbosAuth0Token = undefined;
       throw err;
     }
+  }
+
+  static verifyStripeEvent(payload: string, sigHeader: unknown) {
+    if (typeof sigHeader !== 'string') {
+      throw new Error("Invalid stripe request, no stripe-signature header");
+    }
+    const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+    return event;
   }
 
   // This will retry the request every 10 seconds, up to 20 times, with a backoff rate of 1.2
   @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2})
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
-    const token = dbosAuth0Token;
-    if (!token) {
-      ctxt.logger.error("No access token found, aborting update entitlement");
-      return;
+    let token = Utils.dbosAuth0Token;
+    const ts = Date.now();
+    // Fetch auth0 credential every 12 hours.
+    // TODO: use cron job.
+    if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
+      token = await Utils.retrieveCloudCredential(ctxt);
+      Utils.lastTokenFetch = ts;
     }
 
     // Update the user's subscription status in DBOS Cloud

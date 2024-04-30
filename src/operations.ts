@@ -18,37 +18,32 @@ const dbosJWT = jwt({
   issuer: `https://${DBOSLoginDomain}/`,
   audience: 'dbos-cloud-api'
 });
+let lastTokenFetch = 0;
 
 // These endpoints can only be called with an authenticated user on DBOS cloud
 @Authentication(Utils.userAuthMiddleware)
 @KoaMiddleware(dbosJWT)
 export class CloudSubscription {
   @RequiredRole(['user'])
-  @PostApi('/create-customer-portal')
-  static async createCustomerPortal(ctxt: HandlerContext) {
-    const authUser = ctxt.authenticatedUser;
-    const sessionURL = await ctxt.invoke(Utils).createPortal(authUser);
+  @PostApi('/subscribe')
+  static async subscribePlan(ctxt: HandlerContext, @ArgSource(ArgSources.BODY) plan: string) {
+    if (plan !== DBOSProPlanString) { throw new DBOSResponseError("Invalid DBOS Plan", 400); }
+    const auth0UserID = ctxt.authenticatedUser;
+    const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
+    const sessionURL = await ctxt.invoke(Utils).createSubscription(auth0UserID, userEmail).then(x => x.getResult());
     if (!sessionURL) {
-      ctxt.logger.error("Failed to create a customer portal!");
-      throw new DBOSResponseError("Failed to create customer portal!", 500);
+      throw new DBOSResponseError("Failed to create a checkout session!");
     }
     return { url: sessionURL };
   }
 
-  // This function redirects user to a subscription page
   @RequiredRole(['user'])
-  @PostApi('/subscribe')
-  static async subscribePlan(ctxt: HandlerContext, @ArgSource(ArgSources.BODY) plan: string) {
-    // Validate argument
-    if (plan !== DBOSProPlanString) {
-      ctxt.logger.error(`Invalid DBOS plan: ${plan}`);
-      throw new DBOSResponseError("Invalid DBOS Plan", 400);
-    }
-
-    const authUser = ctxt.authenticatedUser;
-    const sessionURL = await ctxt.invoke(Utils).createCheckout(authUser);
+  @PostApi('/create-customer-portal')
+  static async createCustomerPortal(ctxt: HandlerContext) {
+    const auth0User = ctxt.authenticatedUser;
+    const sessionURL = await ctxt.invoke(Utils).createStripeCustomerPortal(auth0User).then(x => x.getResult());
     if (!sessionURL) {
-      throw new Error("Failed to create a checkout session!");
+      throw new DBOSResponseError("Failed to create customer portal!", 500);
     }
     return { url: sessionURL };
   }
@@ -74,10 +69,18 @@ export class StripeWebhook {
       throw new DBOSResponseError("Webhook Error", 400);
     }
 
-    // Fetch auth0 credential every 6 hours.
-    const ts = Date.now();
-    const uuidStr = 'authtoken-' + (ts - (ts % 21600000)).toString();
-    await ctxt.invoke(Utils, uuidStr).retrieveCloudCredential();
+    // Fetch auth0 credential every 12 hours.
+    // TODO: use cron job.
+    try {
+      const ts = Date.now();
+      if ((ts - lastTokenFetch) > 43200000) {
+        const uuidStr = 'authtoken-' + (ts - (ts % 43200000)).toString();
+        await ctxt.invoke(Utils, uuidStr).retrieveCloudCredential();
+        lastTokenFetch = ts;
+      }
+    } catch (err) {
+      ctxt.logger.error(err);
+    }
 
     // Handle the event.
     // Use event ID as the idempotency key for the workflow, making sure once-and-only-once execution.

@@ -11,6 +11,7 @@ exports.up = async function(knex) {
     table.bigInteger('updated_at')
             .notNullable()
             .defaultTo(knex.raw('(EXTRACT(EPOCH FROM now())*1000)::bigint'));
+    table.index('stripe_customer_id');
   });
 };
 

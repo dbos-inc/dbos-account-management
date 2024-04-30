@@ -74,8 +74,7 @@ export class StripeWebhook {
     try {
       const ts = Date.now();
       if ((ts - lastTokenFetch) > 43200000) {
-        const uuidStr = 'authtoken-' + (ts - (ts % 43200000)).toString();
-        await ctxt.invoke(Utils, uuidStr).retrieveCloudCredential();
+        await ctxt.invoke(Utils).retrieveCloudCredential();
         lastTokenFetch = ts;
       }
     } catch (err) {

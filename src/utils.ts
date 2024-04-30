@@ -203,11 +203,11 @@ export class Utils {
       method: 'POST',
       url: `https://${DBOSLoginDomain}/oauth/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: new URLSearchParams({
+      data: {
         grant_type: "refresh_token",
         client_id: DBOSAuth0ClientID,
         refresh_token: refreshToken
-      }),
+      },
     };
     try {
       const response = await axios.request(loginRequest);
@@ -221,15 +221,16 @@ export class Utils {
     }
   }
 
-  @Communicator({intervalSeconds: 10})
+  // This will retry the request every 10 seconds, up to 20 times, with a backoff rate of 1.2
+  @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2})
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
-    // Obtain cloud credentials
-    let token = dbosAuth0Token;
+    const token = dbosAuth0Token;
     if (!token) {
-      token = await Utils.retrieveCloudCredential(ctxt);
+      ctxt.logger.error("No access token found, aborting update entitlement");
+      return;
     }
 
-    // Update the entitlement in DBOS Cloud
+    // Update the user's subscription status in DBOS Cloud
     const entitlementRequest = {
       method: 'POST',
       url: `https://${DBOS_DOMAIN}/admin/v1alpha1/users/update-sub`,

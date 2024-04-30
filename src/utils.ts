@@ -36,23 +36,31 @@ export class Utils {
 
   @Workflow()
   static async stripeWebhookWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
-    // Check subscription from stripe and only active the account if plan is active.
+    // Retrieve the updated subscription from Stripe
+    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
+    if (subscription.price !== DBOSProStripePrice) {
+      throw new Error(`Unknown price: ${subscription.price}; customer ${customerID}; subscription ${subscriptionID}`);
+    }
+
+    // Map the Stripe customer ID to DBOS Cloud user ID
     const dbosAuthID = await ctxt.invoke(Utils).findAuth0UserID(customerID);
     if (!dbosAuthID) {
       throw new Error(`Cannot find auth0 user for stripe customer ${customerID}`);
     }
-    const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
-    if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
-      ctxt.logger.info(`Subscription ${subscriptionID} is incomplete. Do nothing.`);
-      return;
-    } else if (subscription.status === 'active' && subscription.price === DBOSProStripePrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is active for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
-    } else if (subscription.status === 'canceled' && subscription.price === DBOSProStripePrice) {
-      ctxt.logger.info(`Subscription ${subscriptionID} is canceled for user ${dbosAuthID}`);
-      await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
-    } else {
-      ctxt.logger.warn(`Unknown subscription status: ${subscription.status}; or price: ${subscription.price}; user ${dbosAuthID}`);
+
+    // Send a request to the DBOS Cloud admin API to change the user's subscription status.
+    switch (subscription.status) {
+      case 'active':
+      case 'trialing':
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
+        break;
+      case 'canceled':
+      case 'unpaid':
+      case 'paused':
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
+        break;
+      default:
+        ctxt.logger.info(`Do nothing for ${subscription.status} status.`);
     }
   }
 
@@ -170,8 +178,9 @@ export class Utils {
   }
 
   @Communicator()
-  static async retrieveSubscription(_ctxt: CommunicatorContext, subscriptionID: string): Promise<StripeSubscription> {
+  static async retrieveSubscription(ctxt: CommunicatorContext, subscriptionID: string): Promise<StripeSubscription> {
     const subscription = await stripe.subscriptions.retrieve(subscriptionID);
+    ctxt.logger.info(`Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string}`);
     return {
       id: subscriptionID,
       customer: subscription.customer as string,
@@ -235,9 +244,9 @@ export class Utils {
     };
     try {
       const response = await axios.request(entitlementRequest);
-      ctxt.logger.info(`Update entitlement response: ${response.status}`);
+      ctxt.logger.info(`Update entitlement for ${dbosAuth0Token} to plan ${plan}, response: ${response.status}`);
     } catch (err) {
-      ctxt.logger.error(`Failed to update entitlement: ${(err as Error).message}`);
+      ctxt.logger.error(`Failed to update ${dbosAuth0Token} to ${plan}: ${(err as Error).message}`);
       throw err;
     }
   }

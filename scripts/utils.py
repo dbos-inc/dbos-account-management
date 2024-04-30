@@ -4,8 +4,6 @@ import random
 import string
 import subprocess
 
-import requests
-
 from config import config
 
 def run_subprocess(command, path: str, check: bool = True, silent: bool = False):

@@ -245,9 +245,9 @@ export class Utils {
     };
     try {
       const response = await axios.request(entitlementRequest);
-      ctxt.logger.info(`Update entitlement for ${dbosAuth0Token} to plan ${plan}, response: ${response.status}`);
+      ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
     } catch (err) {
-      ctxt.logger.error(`Failed to update ${dbosAuth0Token} to ${plan}: ${(err as Error).message}`);
+      ctxt.logger.error(`Failed to update ${dbosAuthID} to ${plan}: ${(err as Error).message}`);
       throw err;
     }
   }

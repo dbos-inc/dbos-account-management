@@ -1,5 +1,7 @@
 import json
 import os
+import random
+import string
 import subprocess
 
 import requests
@@ -30,3 +32,8 @@ def get_credentials(path: str):
         raise Exception(f'Could not find credentials file {credentials_path}')
     with open(credentials_path, 'r') as f:
         return json.load(f)
+
+def generate_password():
+    characters = string.ascii_letters + string.digits
+    random_string = ''.join(random.choice(characters) for _ in range(16))
+    return random_string

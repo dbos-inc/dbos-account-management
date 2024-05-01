@@ -17,7 +17,7 @@ jobs:
         npm prune --omit=dev
         npm install @dbos-inc/dbos-cloud@latest
     - name: Deploy to prod
-      run: python3 scripts/dbos_deploy.py
+      run: bash scripts/dbos_deploy.sh
       env:
         DBOS_DOMAIN: cloud.dbos.dev
         DBOS_APP_DB_NAME: dbos_subscription
@@ -26,3 +26,4 @@ jobs:
         STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_PROD_PRO_PRICE}}
         DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
         DBOS_TEST_REFRESH_TOKEN: ${{secrets.DBOS_PROD_TEST_REFRESH_TOKEN}}
+        DBOS_DB_PASSWORD: ${{secrets.DBOS_PROD_DB_PASSWORD}}

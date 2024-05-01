@@ -19,7 +19,7 @@ jobs:
         npm prune --omit=dev
         npm install @dbos-inc/dbos-cloud@latest
     - name: Deploy to staging
-      run: python3 scripts/dbos_deploy.py
+      run: bash scripts/dbos_deploy.sh
       env:
         DBOS_DOMAIN: staging.dev.dbos.dev
         DBOS_APP_DB_NAME: testsubscription
@@ -28,3 +28,4 @@ jobs:
         STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_TEST_PRO_PRICE}}
         DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
         DBOS_TEST_REFRESH_TOKEN: ${{secrets.DBOS_TEST_TEST_REFRESH_TOKEN}}
+        DBOS_DB_PASSWORD: ${{secrets.DBOS_TEST_DB_PASSWORD}}

@@ -48,7 +48,6 @@ export class CloudSubscription {
   }
 }
 
-// Webhook has to be in separate class because it's not using our auth middleware
 export class StripeWebhook {
   @PostApi('/stripe_webhook')
   static async stripeWebhook(ctxt: HandlerContext) {
@@ -56,20 +55,19 @@ export class StripeWebhook {
     const req = ctxt.koaContext.request;
     const event = Utils.verifyStripeEvent(req.rawBody as string, req.headers['stripe-signature']);
 
-    // Invoke the workflow asynchronously and quickly response to Stripe.
-    // Use event.id as the workflow idempotency key to guarantee exactly once processing.
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.deleted':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
-        await ctxt.invoke(Utils, event.id).stripeWebhookWorkflow(subscription.id, subscription.customer as string);
+        // Start the workflow with event.id as the idempotency key without waiting for it to finish
+        await ctxt.invoke(Utils, event.id).stripeEventWorkflow(subscription.id, subscription.customer as string);
         break;
       }
       case 'checkout.session.completed': {
         const checkout = event.data.object as Stripe.Checkout.Session;
         if (checkout.mode === 'subscription') {
-          await ctxt.invoke(Utils, event.id).stripeWebhookWorkflow(checkout.subscription as string, checkout.customer as string);
+          await ctxt.invoke(Utils, event.id).stripeEventWorkflow(checkout.subscription as string, checkout.customer as string);
         }
         break;
       }

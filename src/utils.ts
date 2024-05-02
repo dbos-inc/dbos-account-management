@@ -34,7 +34,7 @@ export class Utils {
   }
 
   @Workflow()
-  static async stripeWebhookWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
+  static async stripeEventWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
     // Retrieve the updated subscription from Stripe
     const subscription = await ctxt.invoke(Utils).retrieveSubscription(subscriptionID);
     if (subscription.price !== DBOSProStripePrice) {

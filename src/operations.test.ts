@@ -57,9 +57,9 @@ describe("cors-tests", () => {
     if (!process.env.DBOS_DEPLOY_REFRESH_TOKEN) {
       console.log("Skipping cloud-credentials test, no refresh token provided");
     }
-  await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).resolves.toBeTruthy();
-  process.env["DBOS_DEPLOY_REFRESH_TOKEN"] = "faketoken";
-  await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).rejects.toThrow();
+    await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).resolves.toBeTruthy();
+    process.env["DBOS_DEPLOY_REFRESH_TOKEN"] = "faketoken";
+    await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).rejects.toThrow();
   });
 
 });

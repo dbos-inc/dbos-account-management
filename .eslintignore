@@ -2,3 +2,4 @@ dist
 *.test.ts
 jest.config.js
 migrations
+knexfile.js

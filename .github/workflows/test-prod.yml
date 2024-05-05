@@ -5,12 +5,6 @@ on:
     # Runs every twelve hours
     - cron: '0 */12 * * *'
   workflow_dispatch:
-  pull_request:
-    types:
-      - ready_for_review
-      - opened
-      - reopened
-      - synchronize
 
 jobs:
   test:
@@ -26,7 +20,7 @@ jobs:
       run: python3 scripts/staging_test.py
       env:
         DBOS_DOMAIN: cloud.dbos.dev
-        DBOS_APP_DB_NAME: testsubscription
+        DBOS_APP_DB_NAME: dbos_subscription
         STRIPE_SECRET_KEY: ${{secrets.STRIPE_PROD_SECRET_KEY}}
         STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_PROD_WEBHOOK_SECRET}}
         STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_PROD_PRO_PRICE}}

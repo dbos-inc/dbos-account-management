@@ -22,6 +22,7 @@ describe("cors-tests", () => {
     await expect(testRuntime.invoke(Utils).recordStripeCustomer(auth0TestID, stripeTestID, testEmail)).resolves.toBeFalsy(); // No error
     await expect(testRuntime.invoke(Utils).findStripeCustomerID(auth0TestID)).resolves.toBe(stripeTestID);
     await expect(testRuntime.invoke(Utils).findAuth0UserID(stripeTestID)).resolves.toBe(auth0TestID);
+    await expect(testRuntime.invoke(Utils).findAuth0UserID("nonexistent")).rejects.toThrow("Cannot find auth0 user for stripe customer nonexistent"); // Non existent user
   });
 
   test("subscribe-cors", async () => {
@@ -50,5 +51,4 @@ describe("cors-tests", () => {
     expect(resp2.headers["access-control-allow-origin"]).toBe("https://dbos.webflow.io");
     expect(resp2.headers["access-control-allow-credentials"]).toBe("true");
   });
-
 });

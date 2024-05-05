@@ -37,14 +37,11 @@ jobs:
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
-        with:
-          path: cloud-subscription
       - name: Use Node.js 20
         uses: actions/setup-node@v3
         with:
           node-version: 20
       - name: Compile and test
-        working-directory: cloud-subscription
         run: |
           npm ci
           npm run build

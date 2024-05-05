@@ -1,3 +1,4 @@
 dist
 *.test.ts
 jest.config.js
+migrations

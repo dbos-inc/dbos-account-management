@@ -1,0 +1,28 @@
+name: Test Subscription App on Prod
+
+on:
+  schedule:
+    # Runs every twelve hours
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: self-hosted
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        npm install @dbos-inc/dbos-cloud@latest
+    - name: Test on prod
+      run: python3 scripts/staging_test.py
+      env:
+        DBOS_DOMAIN: cloud.dbos.dev
+        DBOS_APP_DB_NAME: testsubscription
+        STRIPE_SECRET_KEY: ${{secrets.STRIPE_PROD_SECRET_KEY}}
+        STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_PROD_WEBHOOK_SECRET}}
+        STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_PROD_PRO_PRICE}}
+        DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
+        DBOS_TEST_REFRESH_TOKEN: ${{secrets.DBOS_PROD_TEST_REFRESH_TOKEN}}

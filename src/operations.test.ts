@@ -51,4 +51,15 @@ describe("cors-tests", () => {
     expect(resp2.headers["access-control-allow-origin"]).toBe("https://dbos.webflow.io");
     expect(resp2.headers["access-control-allow-credentials"]).toBe("true");
   });
+
+  // Test retrieve cloud credentials
+  test("cloud-credential", async () => {
+    if (!process.env.DBOS_DEPLOY_REFRESH_TOKEN) {
+      console.log("Skipping cloud-credentials test, no refresh token provided");
+    }
+  await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).resolves.toBeTruthy();
+  process.env["DBOS_DEPLOY_REFRESH_TOKEN"] = "faketoken";
+  await expect(testRuntime.invoke(Utils).retrieveCloudCredential()).rejects.toThrow();
+  });
+
 });

@@ -160,37 +160,6 @@ export class Utils {
   /**
    * Communicators interacting with DBOS Cloud
    */
-  static dbosAuth0Token: string|undefined;
-  static lastTokenFetch = 0;
-  @Communicator({intervalSeconds: 10})  
-  static async retrieveCloudCredential(ctxt: CommunicatorContext): Promise<string> {
-    const refreshToken = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
-    if (!refreshToken) {
-      throw new Error("No refresh token found");
-    }
-    // eslint-disable-next-line no-secrets/no-secrets
-    const DBOSAuth0ClientID = DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
-    const loginRequest = {
-      method: 'POST',
-      url: `https://${DBOSLoginDomain}/oauth/token`,
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: {
-        grant_type: "refresh_token",
-        client_id: DBOSAuth0ClientID,
-        refresh_token: refreshToken
-      },
-    };
-    try {
-      const response = await axios.request(loginRequest);
-      const tokenResponse = response.data as RefreshTokenAuthResponse;
-      Utils.dbosAuth0Token = tokenResponse.access_token;
-      return tokenResponse.access_token;
-    } catch (err) {
-      ctxt.logger.error(`Failed to get access token: ${(err as Error).message}`);
-      Utils.dbosAuth0Token = undefined;
-      throw err;
-    }
-  }
 
   static verifyStripeEvent(payload?: string, reqHeaders?: IncomingHttpHeaders) {
     if (!payload || !reqHeaders) {
@@ -215,7 +184,7 @@ export class Utils {
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
     let token = Utils.dbosAuth0Token;
     const ts = Date.now();
-    // Fetch auth0 credential every 12 hours.
+    // Fetch auth0 credential if it's not available or expired
     if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
       token = await Utils.retrieveCloudCredential(ctxt);
       Utils.lastTokenFetch = ts;
@@ -236,6 +205,38 @@ export class Utils {
     };
     const response = await axios.request(entitlementRequest);
     ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
+  }
+
+  static dbosAuth0Token: string|undefined;
+  static lastTokenFetch = 0;
+  @Communicator({retriesAllowed: false})
+  static async retrieveCloudCredential(_ctxt: CommunicatorContext): Promise<string> {
+    const refreshToken = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
+    if (!refreshToken) {
+      throw new Error("No refresh token found");
+    }
+    // eslint-disable-next-line no-secrets/no-secrets
+    const DBOSAuth0ClientID = DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
+    const loginRequest = {
+      method: 'POST',
+      url: `https://${DBOSLoginDomain}/oauth/token`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      data: {
+        grant_type: "refresh_token",
+        client_id: DBOSAuth0ClientID,
+        refresh_token: refreshToken
+      },
+    };
+    try {
+      Utils.dbosAuth0Token = undefined;
+      const response = await axios.request(loginRequest);
+      const tokenResponse = response.data as RefreshTokenAuthResponse;
+      Utils.dbosAuth0Token = tokenResponse.access_token;
+      return tokenResponse.access_token;
+    } catch (err) {
+      Utils.dbosAuth0Token = undefined;
+      throw err;
+    }
   }
 
   static auth0JwtVerifier = jwt({

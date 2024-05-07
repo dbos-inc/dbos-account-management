@@ -19,9 +19,9 @@ This repo demonstrates a complete production DBOS application, including cloud d
 
 The main source code files:
 - `src/`
-  - `operations.ts` HTTP endpoints
-  - `utils.ts` Workflows, transactions, and communicators
-  - `operations.test.ts` Unit tests
+  - `endpoints.ts` HTTP endpoints
+  - `subscription.ts` Workflows, transactions, and communicators for subscriptions
+  - `subscription.test.ts` Unit tests
 - `dbos-config.yaml` DBOS configuration file
 - `migrations/` Schema definition in Knex.js format
 

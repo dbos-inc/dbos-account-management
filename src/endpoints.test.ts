@@ -1,5 +1,5 @@
 import { createTestingRuntime, TestingRuntime } from "@dbos-inc/dbos-sdk";
-import { CloudSubscription, Utils } from "./operations";
+import { CloudSubscription, Utils } from "./endpoints";
 import request from "supertest";
 
 describe("cors-tests", () => {

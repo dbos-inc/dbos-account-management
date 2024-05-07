@@ -11,6 +11,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const DBOSDomain = process.env.DBOS_DOMAIN;
 const DBOSLoginDomain = DBOSDomain === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
+const DBOSPlans = {
+  free: 'free',
+  pro: 'pro',
+};
 
 export class Utils {
   // Workflow to process Stripe events sent to the webhook endpoint
@@ -26,12 +30,12 @@ export class Utils {
     switch (status) {
       case 'active':
       case 'trialing':
-        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'pro');
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, DBOSPlans.pro);
         break;
       case 'canceled':
       case 'unpaid':
       case 'paused':
-        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, 'free');
+        await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, DBOSPlans.free);
         break;
       default:
         ctxt.logger.info(`Do nothing for ${status} status.`);

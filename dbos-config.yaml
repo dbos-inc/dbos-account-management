@@ -21,6 +21,10 @@ env:
   DBOS_DEPLOY_REFRESH_TOKEN: ${DBOS_DEPLOY_REFRESH_TOKEN}
   STRIPE_DBOS_PRO_PRICE: ${STRIPE_DBOS_PRO_PRICE}
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+runtimeConfig:
+  entrypoints:
+    - "dist/endpoints.js"
+    - "dist/subscription.js"
 http:
   cors_middleware: true
   credentials: true

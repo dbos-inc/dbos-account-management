@@ -2,8 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HandlerContext, PostApi, DBOSResponseError, RequiredRole, KoaMiddleware, Authentication } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
-import { Utils } from './utils';
-export { Utils } from './utils';
+import { Utils } from './subscription';
 
 // Stripe webhook endpoint
 export class StripeWebhook {

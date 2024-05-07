@@ -26,13 +26,9 @@ describe("cors-tests", () => {
   });
 
   test("subscribe-cors", async () => {
-    const req = {
-      plan: "dbospro",
-    };
     // Check the prefligth request has the correct CORS headers
     const resp = await request(testRuntime.getHandlersCallback())
       .options("/subscribe")
-      .send(req)
       .set("Origin", "https://dbos.dev")
       .set("Access-Control-Request-Method", "POST")
       .set("Authorization", "Bearer testtoken");
@@ -43,7 +39,6 @@ describe("cors-tests", () => {
     // Our staging env.
     const resp2 = await request(testRuntime.getHandlersCallback())
       .options("/subscribe")
-      .send(req)
       .set("Origin", "https://dbos.webflow.io")
       .set("Access-Control-Request-Method", "POST")
       .set("Authorization", "Bearer testtoken");

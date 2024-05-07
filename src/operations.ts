@@ -14,6 +14,7 @@ export class StripeWebhook {
     const event = Utils.verifyStripeEvent(req.rawBody, req.headers);
 
     switch (event.type) {
+      // Handle events when a user subscribes, cancels, or updates their subscription
       case 'customer.subscription.created':
       case 'customer.subscription.deleted':
       case 'customer.subscription.updated': {
@@ -22,6 +23,7 @@ export class StripeWebhook {
         await ctxt.invoke(Utils, event.id).stripeEventWorkflow(subscription.id, subscription.customer as string);
         break;
       }
+      // Handle the event when a user completes payment for a subscription
       case 'checkout.session.completed': {
         const checkout = event.data.object as Stripe.Checkout.Session;
         if (checkout.mode === 'subscription') {
@@ -41,8 +43,7 @@ export class StripeWebhook {
 export class CloudSubscription {
   @RequiredRole(['user'])
   @PostApi('/subscribe')
-  static async subscribePlan(ctxt: HandlerContext, plan: string) {
-    if (plan !== "dbospro") { throw new DBOSResponseError("Invalid DBOS Plan", 400); }
+  static async subscribePlan(ctxt: HandlerContext) {
     const auth0UserID = ctxt.authenticatedUser;
     const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
     const sessionURL = await ctxt.invoke(Utils).createSubscription(auth0UserID, userEmail).then(x => x.getResult());

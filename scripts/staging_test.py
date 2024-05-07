@@ -1,4 +1,3 @@
-# This script is used to automatically deploy this subscription app to DBOS Cloud
 import json
 import os
 import time
@@ -62,10 +61,12 @@ def test_endpoints(path: str):
     )
 
     time.sleep(30) # Wait for subscription to take effect
+    hasFailure = False
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
     if json_data['SubscriptionPlan'] != "pro":
-        raise Exception("Pro tier check failed")
+        hasFailure = True
+        print("Pro tier check failed")
 
     # Cancel the subscription and check we're free tier again
     stripe.Subscription.cancel(subscription.id)
@@ -73,11 +74,16 @@ def test_endpoints(path: str):
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
     if json_data['SubscriptionPlan'] != "free":
-        raise Exception("Free tier check failed")
+        hasFailure = True
+        print("Free tier check failed")
+
+    return hasFailure
 
 if __name__ == "__main__":
     login(app_dir, is_deploy=False)
     print("Successfully login to DBOS Cloud")
 
-    test_endpoints(app_dir)
+    hasFailure = test_endpoints(app_dir)
+    if hasFailure:
+        raise Exception("Failed to test endpoints on DBOS Cloud")
     print("Successfully tested endpoints on DBOS Cloud")

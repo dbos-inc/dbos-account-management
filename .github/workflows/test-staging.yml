@@ -17,7 +17,7 @@ jobs:
       run: |
         npm install @dbos-inc/dbos-cloud@preview
     - name: Test on staging
-      run: python3 scripts/staging_test.py
+      run: python3 scripts/subscription_integration_test.py
       env:
         DBOS_DOMAIN: staging.dev.dbos.dev
         DBOS_APP_DB_NAME: testsubscription

@@ -1,6 +1,6 @@
 # DBOS Cloud Account Management
 
-This repo contains code for our cloud account subscription management app, which is built with DBOS Transact and Stripe, and deployed on DBOS Cloud.
+This repo contains code for our cloud account management app, which is built with DBOS Transact and Stripe, and deployed on DBOS Cloud.
 
 ## Overview
 When a customer clicks "Upgrade to DBOS Pro" on our [website](https://www.dbos.dev/pricing), this app redirects them to a customized Stripe checkout page, where they enter payment information. After they pay, Stripe sends a notification to a webhook endpoint on this app. The webhook retrieves the customer's updated subscription status from Stripe, maps their Stripe customer ID to a DBOS Cloud account ID, and updates their subscription status in DBOS Cloud.
@@ -28,5 +28,5 @@ The main source code files:
 Files for CI/CD:
 - `scripts/`
   - `dbos_deploy.sh` Script that deploys this app to DBOS Cloud
-  - `staging_test.py` Automated testing scripts that runs against staging
+  - `subscription_integration_test.py` Automated integration test for subscription that runs against staging and prod
 - `.github/workflows/` Github Actions for deployment and testing

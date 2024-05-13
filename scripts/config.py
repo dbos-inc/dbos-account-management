@@ -2,6 +2,8 @@ import os
 
 class Config:
     def __init__(self):
+        dbos_domain = os.getenv('DBOS_DOMAIN', 'cloud.dbos.dev')
+        print("DBOS_DOMAIN: ", dbos_domain)
         self.dbos_app_name = os.environ['DBOS_APP_NAME']
         if not self.dbos_app_name:
             raise Exception('DBOS_APP_NAME not set')

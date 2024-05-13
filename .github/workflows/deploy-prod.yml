@@ -5,25 +5,29 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-
+    - name: Use Node.js 20
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20
     - name: Install dependencies
       run: |
         npm ci
         npm run build
         npm prune --omit=dev
-        npm install @dbos-inc/dbos-cloud@latest
+        npm install @dbos-inc/dbos-cloud@preview
     - name: Deploy to prod
       run: bash scripts/dbos_deploy.sh
       env:
-        DBOS_DOMAIN: cloud.dbos.dev
+        APP_DBOS_DOMAIN: cloud.dbos.dev
+        DBOS_APP_NAME: dbos
         DBOS_APP_DB_NAME: dbos_subscription
         STRIPE_SECRET_KEY: ${{secrets.STRIPE_PROD_SECRET_KEY}}
         STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_PROD_WEBHOOK_SECRET}}
         STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_PROD_PRO_PRICE}}
         DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
-        DBOS_TEST_REFRESH_TOKEN: ${{secrets.DBOS_PROD_TEST_REFRESH_TOKEN}}
+        DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
         DBOS_DB_PASSWORD: ${{secrets.DBOS_PROD_DB_PASSWORD}}

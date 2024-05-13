@@ -8,7 +8,7 @@ import axios from 'axios';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-const DBOSDomain = process.env.DBOS_DOMAIN;
+const DBOSDomain = process.env.APP_DBOS_DOMAIN;
 const DBOSLoginDomain = DBOSDomain === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
 const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
 const DBOSPlans = {
@@ -215,7 +215,7 @@ export class Utils {
   static lastTokenFetch = 0;
   @Communicator({retriesAllowed: false})
   static async retrieveCloudCredential(_ctxt: CommunicatorContext): Promise<string> {
-    const refreshToken = process.env.DBOS_DEPLOY_REFRESH_TOKEN;
+    const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
     if (!refreshToken) {
       throw new Error("No refresh token found");
     }

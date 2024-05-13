@@ -26,7 +26,7 @@ def test_endpoints(path: str):
     # Test the subscribe endpoint
     credentials = get_credentials(path)
     token = credentials['token']
-    url = f"https://subscribe-{config.dbos_app_name}/subscribe"
+    url = f"https://subscribe-{config.dbos_app_name}.cloud.dbos.dev/subscribe"
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -38,7 +38,7 @@ def test_endpoints(path: str):
     assert res.status_code == 200, f"Cloud subscribe endpoint failed: {res.status_code} - {res.text}"
 
     # Test customer portal endpoint
-    url = f"https://subscribe-{config.dbos_app_name}/create-customer-portal"
+    url = f"https://subscribe-{config.dbos_app_name}.cloud.dbos.dev/create-customer-portal"
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'

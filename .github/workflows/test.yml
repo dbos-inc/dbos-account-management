@@ -49,5 +49,5 @@ jobs:
           npm run test
         env:
           PGPASSWORD: dbos
-          DBOS_DOMAIN: staging.dev.dbos.dev
-          DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
+          APP_DBOS_DOMAIN: staging.dev.dbos.dev
+          DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}

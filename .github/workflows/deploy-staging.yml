@@ -20,7 +20,7 @@ jobs:
         npm ci
         npm run build
         npm prune --omit=dev
-        npm install @dbos-inc/dbos-cloud@latest
+        npm install @dbos-inc/dbos-cloud@preview
     - name: Deploy to staging
       run: bash scripts/dbos_deploy.sh
       env:

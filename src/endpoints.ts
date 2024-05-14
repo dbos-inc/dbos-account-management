@@ -34,10 +34,11 @@ export class StripeWebhook {
   }
 }
 
-// These endpoints return Stripe URLs and can only be called with an authenticated user on DBOS cloud
+// Endpoints to retrieve Stripe session URLs
 @Authentication(Utils.userAuthMiddleware)
 @KoaMiddleware(Utils.auth0JwtVerifier)
 export class CloudSubscription {
+  // Retrieve a Stripe checkout sesion URL for an authenticated customer
   @RequiredRole(['user'])
   @PostApi('/subscribe')
   static async subscribePlan(ctxt: HandlerContext) {
@@ -51,6 +52,7 @@ export class CloudSubscription {
     return { url: sessionURL };
   }
 
+  // Retrieve a Stripe customer portal URL for an authenticated customer
   @RequiredRole(['user'])
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {

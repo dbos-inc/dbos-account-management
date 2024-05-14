@@ -42,6 +42,7 @@ export class Utils {
     }
   }
 
+  // Workflow to create a Stripe checkout session
   @Workflow()
   static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
     // First, look up the customer from the accounts table
@@ -53,11 +54,12 @@ export class Utils {
       await ctxt.invoke(Utils).recordStripeCustomer(auth0UserID, stripeCustomerID, userEmail);
     }
 
-    // Finally, create a Stripe subscription.
+    // Finally, create a Stripe checkout session.
     const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
     return res;
   }
 
+  // Workflow to create a Stripe customer portal
   @Workflow()
   static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string): Promise<string|null> {
     const stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
@@ -69,9 +71,8 @@ export class Utils {
     return sessionURL;
   }
 
-  /**
-   * Transactions managing user accounts
-   */
+
+  // Find the Stripe customer ID corresponding to an Auth0 user ID
   @Transaction({readOnly: true})
   static async findStripeCustomerID(ctxt: TransactionContext<Knex>, auth0UserID: string): Promise<string|undefined> {
     const client = ctxt.client;
@@ -81,6 +82,7 @@ export class Utils {
     return res === undefined ? undefined : res.stripe_customer_id;
   }
 
+  // Find the Auth0 user ID corresponding to a Stripe customer ID
   @Transaction({readOnly: true})
   static async findAuth0UserID(ctxt: TransactionContext<Knex>, stripeCustomerID: string): Promise<string> {
     const client = ctxt.client;
@@ -93,6 +95,7 @@ export class Utils {
     return res.auth0_subject_id;
   }
 
+  // Insert a mapping between a customer's Auth0 user ID and Stripe customer ID
   @Transaction()
   static async recordStripeCustomer(ctxt: TransactionContext<Knex>, auth0UserID: string, stripeCustomerID: string, email: string): Promise<void> {
     const client = ctxt.client;
@@ -107,10 +110,8 @@ export class Utils {
     }
   }
 
-  /**
-   * Communicators interacting with Stripe
-   */
 
+  // Create a Stripe billing portal for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
   static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
     const session = await stripe.billingPortal.sessions.create({
@@ -120,6 +121,7 @@ export class Utils {
     return session.url;
   }
 
+  // Create a Stripe checkout session for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
   static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
     const session = await stripe.checkout.sessions.create({
@@ -138,6 +140,7 @@ export class Utils {
     return session.url;
   }
 
+  // Create a customer in Stripe for an authenticated user
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
   static async createStripeCustomer(ctxt: CommunicatorContext, auth0UserID: string, userEmail: string): Promise<string> {
     const customer = await stripe.customers.create({
@@ -151,6 +154,7 @@ export class Utils {
     return customer.id;
   }
 
+  // Retrieve the status of a subscription from Stripe
   @Communicator()
   static async getSubscriptionStatus(ctxt: CommunicatorContext, subscriptionID: string): Promise<Stripe.Subscription.Status> {
     const subscription = await stripe.subscriptions.retrieve(subscriptionID);
@@ -161,10 +165,7 @@ export class Utils {
     return subscription.status;
   }
 
-  /**
-   * Communicators interacting with DBOS Cloud
-   */
-
+  // Utility function verifying that a webhook event originated from Stripe
   static verifyStripeEvent(payload?: string, reqHeaders?: IncomingHttpHeaders) {
     if (!payload || !reqHeaders) {
       throw new DBOSResponseError("Invalid stripe request, no request headers or payload", 400);
@@ -183,18 +184,19 @@ export class Utils {
     return event;
   }
 
-  // This will retry the request every 10 seconds, up to 20 times, with a backoff rate of 1.2
-  @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2})
+  // Update a user's subscription status in DBOS Cloud
+  @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2}) // Configure automatic retries
   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
     let token = Utils.dbosAuth0Token;
     const ts = Date.now();
-    // Fetch auth0 credential if it's not available or expired
+    // Fetch an access token from Auth0 if the current token is not present or expired
     if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
-      token = await Utils.retrieveCloudCredential(ctxt);
+      ctxt.logger.info("Retrieving access token from Auth0");
+      token = await Utils.retrieveAccessToken();
       Utils.lastTokenFetch = ts;
     }
 
-    // Update the user's subscription status in DBOS Cloud
+    // Send an authenticated request to the DBOS Cloud admin API to update the user's subscription status
     const entitlementRequest = {
       method: 'POST',
       url: `https://${DBOSDomain}/admin/v1alpha1/users/update-sub`,
@@ -213,8 +215,8 @@ export class Utils {
 
   static dbosAuth0Token: string|undefined;
   static lastTokenFetch = 0;
-  @Communicator({retriesAllowed: false})
-  static async retrieveCloudCredential(_ctxt: CommunicatorContext): Promise<string> {
+  // Securely retrieve an access token from Auth0 authorizing this app to use the DBOS Cloud admin API
+  static async retrieveAccessToken(): Promise<string> {
     const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
     if (!refreshToken) {
       throw new Error("No refresh token found");
@@ -254,9 +256,10 @@ export class Utils {
     audience: 'dbos-cloud-api'
   });
 
-  /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+  // Middleware authenticating requests using JWT tokens
   static async userAuthMiddleware(ctxt: MiddlewareContext) {
     if (ctxt.requiredRole.length > 0) {
+      /* eslint-disable @typescript-eslint/no-unsafe-member-access */
       if (!ctxt.koaContext.state.user) {
         throw new DBOSResponseError("No authenticated DBOS User!", 401);
       }

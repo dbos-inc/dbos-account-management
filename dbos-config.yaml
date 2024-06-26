@@ -32,6 +32,11 @@ http:
     - 'https://dbos.webflow.io'
     - 'https://www.dbos.dev'
     - 'https://dbos.dev'
+    - 'https://console.dbos.dev'
+    - 'https://staging.console.dbos.dev'
+    - 'http://localhost:3000'
+    - 'http://localhost:4173'
+    - 'http://localhost:5173'
 telemetry:
   logs:
     logLevel: 'info'

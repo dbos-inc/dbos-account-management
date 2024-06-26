@@ -46,11 +46,30 @@ describe("cors-tests", () => {
     expect(resp2.status).toBe(204);
     expect(resp2.headers["access-control-allow-origin"]).toBe("https://dbos.webflow.io");
     expect(resp2.headers["access-control-allow-credentials"]).toBe("true");
+
+    // Cloud console
+    const resp3 = await request(testRuntime.getHandlersCallback())
+      .options("/subscribe")
+      .set("Origin", "https://console.dbos.dev")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Authorization", "Bearer testtoken");
+    expect(resp3.status).toBe(204);
+    expect(resp3.headers["access-control-allow-origin"]).toBe("https://console.dbos.dev");
+    expect(resp3.headers["access-control-allow-credentials"]).toBe("true");
+
+    const resp4 = await request(testRuntime.getHandlersCallback())
+      .options("/subscribe")
+      .set("Origin", "https://staging.console.dbos.dev")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Authorization", "Bearer testtoken");
+    expect(resp4.status).toBe(204);
+    expect(resp4.headers["access-control-allow-origin"]).toBe("https://staging.console.dbos.dev");
+    expect(resp4.headers["access-control-allow-credentials"]).toBe("true");
   });
 
   // Test retrieve cloud credentials
   test("cloud-credential", async () => {
-    if (!process.env.DBOS_LOGIN_REFRESH_TOKEN) {
+    if (!process.env.DBOS_LOGIN_REFRESH_TOKEN || process.env.DBOS_LOGIN_REFRESH_TOKEN == "null") {
       console.log("Skipping cloud-credentials test, no refresh token provided");
       return;
     }

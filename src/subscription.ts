@@ -5,6 +5,7 @@ import jwt from "koa-jwt";
 import Stripe from "stripe";
 import { Knex } from 'knex';
 import axios from 'axios';
+import { channel } from "diagnostics_channel";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -211,6 +212,29 @@ export class Utils {
     };
     const response = await axios.request(entitlementRequest);
     ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
+
+    // Send a slack notification
+    if (process.env.ZAZU_SLACK_TOKEN) {
+      let title = "User subscribed to DBOS Pro :)";
+      if (plan === DBOSPlans.free) {
+        title = "User canceled DBOS Pro :(";
+      }
+      const slackRequest = {
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ZAZU_SLACK_TOKEN}`,
+        },
+        data: {
+          channel: process.env.ZAZU_SLACK_CHANNEL,
+          text: title,
+          attachments: [ {text: `User ${dbosAuthID} has been updated to plan ${plan}`} ]
+        },
+      };
+      const res = await axios.request(slackRequest);
+      ctxt.logger.info(`Sent slack notification, response: ${res.status}`);
+    }
   }
 
   static dbosAuth0Token: string|undefined;

@@ -211,6 +211,29 @@ export class Utils {
     };
     const response = await axios.request(entitlementRequest);
     ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
+
+    // Send a slack notification
+    if (process.env.ZAZU_SLACK_TOKEN && dbosAuthID !== process.env.DBOS_TEST_USER) {
+      let title = "User subscribed to DBOS Pro :partying_face:";
+      if (plan === DBOSPlans.free) {
+        title = "User canceled DBOS Pro :sadge:";
+      }
+      const slackRequest = {
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ZAZU_SLACK_TOKEN}`,
+        },
+        data: {
+          channel: process.env.ZAZU_SLACK_CHANNEL,
+          text: title,
+          attachments: [ {text: `User ${dbosAuthID} is using ${plan} tier. DBOS Cloud response status: ${response.status}`} ]
+        },
+      };
+      const res = await axios.request(slackRequest);
+      ctxt.logger.info(`Sent slack notification, response: ${res.status}`);
+    }
   }
 
   static dbosAuth0Token: string|undefined;

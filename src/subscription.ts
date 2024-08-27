@@ -214,9 +214,9 @@ export class Utils {
 
     // Send a slack notification
     if (process.env.ZAZU_SLACK_TOKEN) {
-      let title = "User subscribed to DBOS Pro :)";
+      let title = "User subscribed to DBOS Pro :partying_face:";
       if (plan === DBOSPlans.free) {
-        title = "User canceled DBOS Pro :(";
+        title = "User canceled DBOS Pro :sadge:";
       }
       const slackRequest = {
         method: 'POST',
@@ -228,7 +228,7 @@ export class Utils {
         data: {
           channel: process.env.ZAZU_SLACK_CHANNEL,
           text: title,
-          attachments: [ {text: `User ${dbosAuthID} has been updated to plan ${plan}`} ]
+          attachments: [ {text: `User ${dbosAuthID} has been updated to ${plan} tier`} ]
         },
       };
       const res = await axios.request(slackRequest);

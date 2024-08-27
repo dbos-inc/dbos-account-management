@@ -213,7 +213,7 @@ export class Utils {
     ctxt.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
 
     // Send a slack notification
-    if (process.env.ZAZU_SLACK_TOKEN) {
+    if (process.env.ZAZU_SLACK_TOKEN && dbosAuthID !== process.env.DBOS_TEST_USER) {
       let title = "User subscribed to DBOS Pro :partying_face:";
       if (plan === DBOSPlans.free) {
         title = "User canceled DBOS Pro :sadge:";
@@ -228,7 +228,7 @@ export class Utils {
         data: {
           channel: process.env.ZAZU_SLACK_CHANNEL,
           text: title,
-          attachments: [ {text: `User ${dbosAuthID} has been updated to ${plan} tier`} ]
+          attachments: [ {text: `User ${dbosAuthID} is using ${plan} tier. DBOS Cloud response status: ${response.status}`} ]
         },
       };
       const res = await axios.request(slackRequest);

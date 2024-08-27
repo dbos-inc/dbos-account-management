@@ -5,7 +5,6 @@ import jwt from "koa-jwt";
 import Stripe from "stripe";
 import { Knex } from 'knex';
 import axios from 'axios';
-import { channel } from "diagnostics_channel";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 

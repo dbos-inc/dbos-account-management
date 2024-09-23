@@ -136,6 +136,7 @@ export class Utils {
       mode: 'subscription',
       success_url: `https://docs.dbos.dev`,
       cancel_url: `https://www.dbos.dev/pricing`,
+      allow_promotion_codes: true,
     });
     return session.url;
   }

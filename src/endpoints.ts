@@ -45,7 +45,10 @@ export class CloudSubscription {
     const auth0UserID = ctxt.authenticatedUser;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
-    const sessionURL = await ctxt.invokeWorkflow(Utils).createSubscription(auth0UserID, userEmail);
+    const body = ctxt.request.body as {success_url: string, cancel_url: string};
+    const successUrl = body.success_url as string ?? 'https://console.dbos.dev';
+    const cancelUrl = body.cancel_url as string ?? 'https://www.dbos.dev/pricing';
+    const sessionURL = await ctxt.invokeWorkflow(Utils).createSubscription(auth0UserID, userEmail, successUrl, cancelUrl);
     if (!sessionURL) {
       throw new DBOSResponseError("Failed to create a checkout session!", 500);
     }

@@ -44,7 +44,7 @@ export class Utils {
 
   // Workflow to create a Stripe checkout session
   @Workflow()
-  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
+  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string, successUrl: string, cancelUrl: string): Promise<string|null> {
     // First, look up the customer from the accounts table
     let stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
 
@@ -55,7 +55,7 @@ export class Utils {
     }
 
     // Finally, create a Stripe checkout session.
-    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
+    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID, successUrl, cancelUrl);
     return res;
   }
 
@@ -123,7 +123,7 @@ export class Utils {
 
   // Create a Stripe checkout session for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
-  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
+  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string, successUrl: string, cancelUrl: string): Promise<string|null> {
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerID,
       billing_address_collection: 'auto',
@@ -134,8 +134,8 @@ export class Utils {
         },
       ],
       mode: 'subscription',
-      success_url: `https://docs.dbos.dev`,
-      cancel_url: `https://www.dbos.dev/pricing`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       allow_promotion_codes: true,
     });
     return session.url;

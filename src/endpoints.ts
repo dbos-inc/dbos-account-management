@@ -46,8 +46,8 @@ export class CloudSubscription {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
     const body = ctxt.request.body as {success_url: string, cancel_url: string};
-    const successUrl = body.success_url as string ?? 'https://console.dbos.dev';
-    const cancelUrl = body.cancel_url as string ?? 'https://www.dbos.dev/pricing';
+    const successUrl = body.success_url ?? 'https://console.dbos.dev';
+    const cancelUrl = body.cancel_url ?? 'https://www.dbos.dev/pricing';
     const sessionURL = await ctxt.invokeWorkflow(Utils).createSubscription(auth0UserID, userEmail, successUrl, cancelUrl);
     if (!sessionURL) {
       throw new DBOSResponseError("Failed to create a checkout session!", 500);
@@ -60,7 +60,7 @@ export class CloudSubscription {
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
     const auth0User = ctxt.authenticatedUser;
-    const returnUrl = (ctxt.request.body as {return_url: string}).return_url as string ?? 'https://www.dbos.dev/pricing';
+    const returnUrl = (ctxt.request.body as {return_url: string}).return_url ?? 'https://www.dbos.dev/pricing';
     const sessionURL = await ctxt.invokeWorkflow(Utils).createStripeCustomerPortal(auth0User, returnUrl);
     if (!sessionURL) {
       throw new DBOSResponseError("Failed to create customer portal!", 500);

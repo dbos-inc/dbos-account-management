@@ -57,7 +57,8 @@ export class CloudSubscription {
   @PostApi('/create-customer-portal')
   static async createCustomerPortal(ctxt: HandlerContext) {
     const auth0User = ctxt.authenticatedUser;
-    const sessionURL = await ctxt.invokeWorkflow(Utils).createStripeCustomerPortal(auth0User);
+    const returnUrl = (ctxt.request.body as {return_url: string}).return_url as string ?? 'https://www.dbos.dev/pricing';
+    const sessionURL = await ctxt.invokeWorkflow(Utils).createStripeCustomerPortal(auth0User, returnUrl);
     if (!sessionURL) {
       throw new DBOSResponseError("Failed to create customer portal!", 500);
     }

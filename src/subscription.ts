@@ -61,13 +61,13 @@ export class Utils {
 
   // Workflow to create a Stripe customer portal
   @Workflow()
-  static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string): Promise<string|null> {
+  static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string, returnUrl: string): Promise<string|null> {
     const stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
     if (!stripeCustomerID) {
       ctxt.logger.error(`Cannot find stripe customer for user ${auth0UserID}`);
       return null;
     }
-    const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID);
+    const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID, returnUrl);
     return sessionURL;
   }
 
@@ -113,10 +113,10 @@ export class Utils {
 
   // Create a Stripe billing portal for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
-  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
+  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string, returnUrl: string): Promise<string|null> {
     const session = await stripe.billingPortal.sessions.create({
       customer: customerID,
-      return_url: 'https://www.dbos.dev/pricing'
+      return_url: returnUrl,
     });
     return session.url;
   }

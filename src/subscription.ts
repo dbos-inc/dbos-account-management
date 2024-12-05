@@ -44,7 +44,7 @@ export class Utils {
 
   // Workflow to create a Stripe checkout session
   @Workflow()
-  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string): Promise<string|null> {
+  static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string, successUrl: string, cancelUrl: string): Promise<string|null> {
     // First, look up the customer from the accounts table
     let stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
 
@@ -55,19 +55,19 @@ export class Utils {
     }
 
     // Finally, create a Stripe checkout session.
-    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID);
+    const res = await ctxt.invoke(Utils).createStripeCheckout(stripeCustomerID, successUrl, cancelUrl);
     return res;
   }
 
   // Workflow to create a Stripe customer portal
   @Workflow()
-  static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string): Promise<string|null> {
+  static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string, returnUrl: string): Promise<string|null> {
     const stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
     if (!stripeCustomerID) {
       ctxt.logger.error(`Cannot find stripe customer for user ${auth0UserID}`);
       return null;
     }
-    const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID);
+    const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID, returnUrl);
     return sessionURL;
   }
 
@@ -113,17 +113,17 @@ export class Utils {
 
   // Create a Stripe billing portal for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
-  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string): Promise<string|null> {
+  static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string, returnUrl: string): Promise<string|null> {
     const session = await stripe.billingPortal.sessions.create({
       customer: customerID,
-      return_url: 'https://www.dbos.dev/pricing'
+      return_url: returnUrl,
     });
     return session.url;
   }
 
   // Create a Stripe checkout session for a customer
   @Communicator({intervalSeconds: 10, maxAttempts: 2})
-  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string): Promise<string|null> {
+  static async createStripeCheckout(_ctxt: CommunicatorContext, stripeCustomerID: string, successUrl: string, cancelUrl: string): Promise<string|null> {
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerID,
       billing_address_collection: 'auto',
@@ -134,8 +134,8 @@ export class Utils {
         },
       ],
       mode: 'subscription',
-      success_url: `https://docs.dbos.dev`,
-      cancel_url: `https://www.dbos.dev/pricing`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       allow_promotion_codes: true,
     });
     return session.url;

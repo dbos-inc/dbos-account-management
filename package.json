@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npx knex migrate:up && jest --detectOpenHandles",
+    "test": "npx knex migrate:latest && jest --detectOpenHandles",
     "lint": "eslint src",
     "lint-fix": "eslint --fix src",
     "start": "node dist/endpoints.js"
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@dbos-inc/dbos-sdk": "^3.0.27-preview",
+    "@dbos-inc/knex-datasource": "^3.0.27-preview",
     "axios": "^1.7.4",
     "fastify": "^5.4.0",
     "fastify-raw-body": "^5.0.0",

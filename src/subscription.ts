@@ -1,9 +1,11 @@
 import { IncomingHttpHeaders } from "http";
 import Stripe from "stripe";
-import { Knex } from 'knex';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import axios from 'axios';
+import { KnexDataSource } from "@dbos-inc/knex-datasource";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const dataSource = new KnexDataSource('knex-ds', {client: 'pg', connection: process.env.DBOS_DATABASE_URL});
 
 const DBOSDomain = process.env.APP_DBOS_DOMAIN;
 const DBOSLoginDomain = DBOSDomain === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
@@ -28,32 +30,121 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
   event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
   return event;
 }
+
+// Workflow to process Stripe events sent to the webhook endpoint
+async function stripeEventWorkflowImpl(subscriptionID: string, customerID: string) {
+  // Retrieve the updated subscription from Stripe
+  const status = await DBOS.runStep(() => getSubscriptionStatus(subscriptionID), {name: "getSubscriptionStatus", retriesAllowed: true, maxAttempts: 5});
+
+  // Map the Stripe customer ID to DBOS Cloud user ID
+  const dbosAuthID = await dataSource.runTransaction(() => findAuth0UserID(customerID), {name: "findAuth0UserID"});
+
+  // Send a request to the DBOS Cloud admin API to change the user's subscription status
+  switch (status) {
+    case 'active':
+    case 'trialing':
+      await updateCloudEntitlement(dbosAuthID, DBOSPlans.pro);
+      break;
+    case 'canceled':
+    case 'unpaid':
+    case 'paused':
+      await updateCloudEntitlement(dbosAuthID, DBOSPlans.free);
+      break;
+    default:
+      DBOS.logger.info(`Do nothing for ${status} status.`);
+  }
+}
+
+export const stripeEventWorkflow = DBOS.registerWorkflow(stripeEventWorkflowImpl, {name: "stripeEventWorkflow"});
+
+
+// Retrieve the status of a subscription from Stripe
+async function getSubscriptionStatus(subscriptionID: string): Promise<Stripe.Subscription.Status> {
+  const subscription = await stripe.subscriptions.retrieve(subscriptionID);
+  if (subscription.items.data[0].price.id !== DBOSProStripePrice) {
+    throw new Error(`Unknown price: ${subscription.items.data[0].price.id}; customer ${subscription.customer as string}; subscription ${subscriptionID}`);
+  }
+  DBOS.logger.info(`Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string}`);
+  return subscription.status;
+}
+
+// Find the Auth0 user ID corresponding to a Stripe customer ID
+async function findAuth0UserID(stripeCustomerID: string): Promise<string> {
+  const client = dataSource.client;
+  const res = await client<Accounts>("accounts")
+    .select("auth0_subject_id")
+    .where("stripe_customer_id", stripeCustomerID).first();
+  if (!res) {
+    throw new Error(`Cannot find auth0 user for stripe customer ${stripeCustomerID}`);
+  }
+  return res.auth0_subject_id;
+}
+
+// Update a user's subscription status in DBOS Cloud
+async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
+  let token = Utils.dbosAuth0Token;
+  const ts = Date.now();
+  // Fetch an access token from Auth0 if the current token is not present or expired
+  if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
+    DBOS.logger.info("Retrieving access token from Auth0");
+    token = await Utils.retrieveAccessToken();
+    Utils.lastTokenFetch = ts;
+  }
+}
+
+// Configure automatic retries
+const updateCloudEntitlement = DBOS.registerStep(updateCloudEntitlementImpl, {name: "updateCloudEntitlement", intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2, retriesAllowed: true});
+
+interface Accounts {
+  auth0_subject_id: string;
+  email: string;
+  stripe_customer_id: string;
+  created_at: number;
+  updated_at: number;
+}
+
+interface RefreshTokenAuthResponse {
+  access_token: string;
+  scope: string;
+  expires_in: number;
+  token_type: string;
+}
+
+class Utils {
+  static dbosAuth0Token: string|undefined;
+  static lastTokenFetch = 0;
+  // Securely retrieve an access token from Auth0 authorizing this app to use the DBOS Cloud admin API
+  static async retrieveAccessToken(): Promise<string> {
+    const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
+    if (!refreshToken) {
+      throw new Error("No refresh token found");
+    }
+    // eslint-disable-next-line no-secrets/no-secrets
+    const DBOSAuth0ClientID = DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
+    const loginRequest = {
+      method: 'POST',
+      url: `https://${DBOSLoginDomain}/oauth/token`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      data: {
+        grant_type: "refresh_token",
+        client_id: DBOSAuth0ClientID,
+        refresh_token: refreshToken
+      },
+    };
+    try {
+      Utils.dbosAuth0Token = undefined;
+      const response = await axios.request(loginRequest);
+      const tokenResponse = response.data as RefreshTokenAuthResponse;
+      Utils.dbosAuth0Token = tokenResponse.access_token;
+      return tokenResponse.access_token;
+    } catch (err) {
+      Utils.dbosAuth0Token = undefined;
+      throw err;
+    }
+  }
+}
+
 // export class Utils {
-//   // Workflow to process Stripe events sent to the webhook endpoint
-//   @Workflow()
-//   static async stripeEventWorkflow(ctxt: WorkflowContext, subscriptionID: string, customerID: string) {
-//     // Retrieve the updated subscription from Stripe
-//     const status = await ctxt.invoke(Utils).getSubscriptionStatus(subscriptionID);
-
-//     // Map the Stripe customer ID to DBOS Cloud user ID
-//     const dbosAuthID = await ctxt.invoke(Utils).findAuth0UserID(customerID);
-
-//     // Send a request to the DBOS Cloud admin API to change the user's subscription status
-//     switch (status) {
-//       case 'active':
-//       case 'trialing':
-//         await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, DBOSPlans.pro);
-//         break;
-//       case 'canceled':
-//       case 'unpaid':
-//       case 'paused':
-//         await ctxt.invoke(Utils).updateCloudEntitlement(dbosAuthID, DBOSPlans.free);
-//         break;
-//       default:
-//         ctxt.logger.info(`Do nothing for ${status} status.`);
-//     }
-//   }
-
 //   // Workflow to create a Stripe checkout session
 //   @Workflow()
 //   static async createSubscription(ctxt: WorkflowContext, auth0UserID: string, userEmail: string, successUrl: string, cancelUrl: string): Promise<string|null> {
@@ -94,18 +185,6 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
 //     return res === undefined ? undefined : res.stripe_customer_id;
 //   }
 
-//   // Find the Auth0 user ID corresponding to a Stripe customer ID
-//   @Transaction({readOnly: true})
-//   static async findAuth0UserID(ctxt: TransactionContext<Knex>, stripeCustomerID: string): Promise<string> {
-//     const client = ctxt.client;
-//     const res = await client<Accounts>("accounts")
-//       .select("auth0_subject_id")
-//       .where("stripe_customer_id", stripeCustomerID).first();
-//     if (!res) {
-//       throw new Error(`Cannot find auth0 user for stripe customer ${stripeCustomerID}`);
-//     }
-//     return res.auth0_subject_id;
-//   }
 
 //   // Insert a mapping between a customer's Auth0 user ID and Stripe customer ID
 //   @Transaction()
@@ -167,29 +246,7 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
 //     return customer.id;
 //   }
 
-//   // Retrieve the status of a subscription from Stripe
-//   @Communicator()
-//   static async getSubscriptionStatus(ctxt: CommunicatorContext, subscriptionID: string): Promise<Stripe.Subscription.Status> {
-//     const subscription = await stripe.subscriptions.retrieve(subscriptionID);
-//     if (subscription.items.data[0].price.id !== DBOSProStripePrice) {
-//       throw new Error(`Unknown price: ${subscription.items.data[0].price.id}; customer ${subscription.customer as string}; subscription ${subscriptionID}`);
-//     }
-//     ctxt.logger.info(`Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string}`);
-//     return subscription.status;
-//   }
 
-
-//   // Update a user's subscription status in DBOS Cloud
-//   @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2}) // Configure automatic retries
-//   static async updateCloudEntitlement(ctxt: CommunicatorContext, dbosAuthID: string, plan: string) {
-//     let token = Utils.dbosAuth0Token;
-//     const ts = Date.now();
-//     // Fetch an access token from Auth0 if the current token is not present or expired
-//     if (!token || (ts - Utils.lastTokenFetch) > 43200000) {
-//       ctxt.logger.info("Retrieving access token from Auth0");
-//       token = await Utils.retrieveAccessToken();
-//       Utils.lastTokenFetch = ts;
-//     }
 
 //     // Send an authenticated request to the DBOS Cloud admin API to update the user's subscription status
 //     const entitlementRequest = {
@@ -231,38 +288,6 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
 //     }
 //   }
 
-//   static dbosAuth0Token: string|undefined;
-//   static lastTokenFetch = 0;
-//   // Securely retrieve an access token from Auth0 authorizing this app to use the DBOS Cloud admin API
-//   static async retrieveAccessToken(): Promise<string> {
-//     const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
-//     if (!refreshToken) {
-//       throw new Error("No refresh token found");
-//     }
-//     // eslint-disable-next-line no-secrets/no-secrets
-//     const DBOSAuth0ClientID = DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
-//     const loginRequest = {
-//       method: 'POST',
-//       url: `https://${DBOSLoginDomain}/oauth/token`,
-//       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-//       data: {
-//         grant_type: "refresh_token",
-//         client_id: DBOSAuth0ClientID,
-//         refresh_token: refreshToken
-//       },
-//     };
-//     try {
-//       Utils.dbosAuth0Token = undefined;
-//       const response = await axios.request(loginRequest);
-//       const tokenResponse = response.data as RefreshTokenAuthResponse;
-//       Utils.dbosAuth0Token = tokenResponse.access_token;
-//       return tokenResponse.access_token;
-//     } catch (err) {
-//       Utils.dbosAuth0Token = undefined;
-//       throw err;
-//     }
-//   }
-
 //   static auth0JwtVerifier = jwt({
 //     secret: koaJwtSecret({
 //       jwksUri: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
@@ -294,17 +319,3 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
 //   }
 // }
 
-// interface RefreshTokenAuthResponse {
-//   access_token: string;
-//   scope: string;
-//   expires_in: number;
-//   token_type: string;
-// }
-
-// interface Accounts {
-//   auth0_subject_id: string;
-//   email: string;
-//   stripe_customer_id: string;
-//   created_at: number;
-//   updated_at: number;
-// }

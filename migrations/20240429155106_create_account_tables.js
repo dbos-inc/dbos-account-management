@@ -1,6 +1,4 @@
-const { Knex } = require("knex");
-
-exports.up = async function(knex) {
+export async function up(knex) {
   await knex.schema.createTable('accounts', table => {
     table.text('auth0_subject_id').primary();
     table.text('email').notNullable();
@@ -15,6 +13,6 @@ exports.up = async function(knex) {
   });
 };
 
-exports.down = async function(knex) {
+export async function down(knex) {
   return knex.schema.dropTable('accounts');
 };

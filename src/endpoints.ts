@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import rawBodyPlugin from 'fastify-raw-body';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
-import { verifyStripeEvent } from './subscription.js';
+import { verifyStripeEvent, stripeEventWorkflow } from './subscription.js';
 
 const fastify = Fastify({logger: true});
 
@@ -35,14 +35,14 @@ fastify.post('/stripe_webhook', {
     case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription;
       // Start the workflow with event.id as the idempotency key without waiting for it to finish
-      // await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(subscription.id, subscription.customer as string);
+      await DBOS.startWorkflow(stripeEventWorkflow, {workflowID: event.id})(subscription.id, subscription.customer as string);
       break;
     }
     // Handle the event when a user completes payment for a subscription
     case 'checkout.session.completed': {
       const checkout = event.data.object as Stripe.Checkout.Session;
       if (checkout.mode === 'subscription') {
-        // await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(checkout.subscription as string, checkout.customer as string);
+        await DBOS.startWorkflow(stripeEventWorkflow, {workflowID: event.id})(checkout.subscription as string, checkout.customer as string);
       }
       break;
     }
@@ -52,7 +52,11 @@ fastify.post('/stripe_webhook', {
   return reply.code(200).send({ received: true });
 })
 
-// // Endpoints to retrieve Stripe session URLs
+// Endpoints to retrieve Stripe session URLs
+
+// Retrieve a Stripe checkout session URL for an authenticated customer
+
+
 // @Authentication(Utils.userAuthMiddleware)
 // @KoaMiddleware(Utils.auth0JwtVerifier)
 // export class CloudSubscription {

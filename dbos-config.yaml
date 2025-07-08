@@ -4,13 +4,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/dbos-inc/dbos-sdk/main/dbos-config.schema.json
 
 database:
-  hostname: 'localhost'
-  port: 5432
-  username: 'postgres'
-  password: ${PGPASSWORD}
-  app_db_name: 'cloud_account'
-  connectionTimeoutMillis: 3000
-  app_db_client: 'knex'
   migrate:
     - npx knex migrate:latest
   rollback:
@@ -24,10 +17,6 @@ env:
   ZAZU_SLACK_TOKEN: ${ZAZU_SLACK_TOKEN}
   ZAZU_SLACK_CHANNEL: ${ZAZU_SLACK_CHANNEL}
   DBOS_TEST_USER: ${DBOS_TEST_USER}
-runtimeConfig:
-  entrypoints:
-    - "dist/endpoints.js"
-    - "dist/subscription.js"
 http:
   cors_middleware: true
   credentials: true
@@ -40,6 +29,4 @@ http:
     - 'http://localhost:3000'
     - 'http://localhost:4173'
     - 'http://localhost:5173'
-telemetry:
-  logs:
-    logLevel: 'info'
+

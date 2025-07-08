@@ -1,21 +1,33 @@
-// import { Communicator, CommunicatorContext, DBOSResponseError, MiddlewareContext, Transaction, TransactionContext, Workflow, WorkflowContext } from "@dbos-inc/dbos-sdk";
-// import { koaJwtSecret } from "jwks-rsa";
-// import { IncomingHttpHeaders } from "http";
-// import jwt from "koa-jwt";
-// import Stripe from "stripe";
-// import { Knex } from 'knex';
-// import axios from 'axios';
+import { IncomingHttpHeaders } from "http";
+import Stripe from "stripe";
+import { Knex } from 'knex';
+import axios from 'axios';
 
-// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// const DBOSDomain = process.env.APP_DBOS_DOMAIN;
-// const DBOSLoginDomain = DBOSDomain === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
-// const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
-// const DBOSPlans = {
-//   free: 'free',
-//   pro: 'pro',
-// };
+const DBOSDomain = process.env.APP_DBOS_DOMAIN;
+const DBOSLoginDomain = DBOSDomain === "cloud.dbos.dev" ? "login.dbos.dev" : "dbos-inc.us.auth0.com";
+const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? "";
+const DBOSPlans = {
+  free: 'free',
+  pro: 'pro',
+};
 
+// Utility function verifying that a webhook event originated from Stripe
+export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: IncomingHttpHeaders) {
+  if (payload === undefined || reqHeaders === undefined) {
+    throw new Error("Invalid stripe request, no request headers or payload");
+  }
+  const sigHeader = reqHeaders['stripe-signature'];
+  if (typeof sigHeader !== 'string') {
+    throw new Error("Invalid stripe request, no stripe-signature header");
+  }
+  let event: Stripe.Event;
+  const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+
+  event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+  return event;
+}
 // export class Utils {
 //   // Workflow to process Stripe events sent to the webhook endpoint
 //   @Workflow()
@@ -166,24 +178,6 @@
 //     return subscription.status;
 //   }
 
-//   // Utility function verifying that a webhook event originated from Stripe
-//   static verifyStripeEvent(payload?: string, reqHeaders?: IncomingHttpHeaders) {
-//     if (!payload || !reqHeaders) {
-//       throw new DBOSResponseError("Invalid stripe request, no request headers or payload", 400);
-//     }
-//     const sigHeader = reqHeaders['stripe-signature'];
-//     if (typeof sigHeader !== 'string') {
-//       throw new DBOSResponseError("Invalid stripe request, no stripe-signature header", 400);
-//     }
-//     let event: Stripe.Event;
-//     const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
-//     try {
-//       event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
-//     } catch (err) {
-//       throw new DBOSResponseError("Unable to verify event from Stripe", 400);
-//     }
-//     return event;
-//   }
 
 //   // Update a user's subscription status in DBOS Cloud
 //   @Communicator({intervalSeconds: 10, maxAttempts: 20, backoffRate: 1.2}) // Configure automatic retries

@@ -1,40 +1,56 @@
 import Fastify from 'fastify';
+import rawBodyPlugin from 'fastify-raw-body';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
+import { verifyStripeEvent } from './subscription.js';
 
 const fastify = Fastify({logger: true});
 
-// // Stripe webhook endpoint
-// export class StripeWebhook {
-//   @PostApi('/stripe_webhook')
-//   static async stripeWebhook(ctxt: HandlerContext) {
-//     // Verify the request is actually from Stripe
-//     const req = ctxt.request;
-//     const event = Utils.verifyStripeEvent(req.rawBody, req.headers);
+// Register raw body plugin before route registration
+await fastify.register(rawBodyPlugin, {
+  field: 'rawBody',
+  global: false,
+  runFirst: true,
+});
 
-//     switch (event.type) {
-//       // Handle events when a user subscribes, cancels, or updates their subscription
-//       case 'customer.subscription.created':
-//       case 'customer.subscription.deleted':
-//       case 'customer.subscription.updated': {
-//         const subscription = event.data.object as Stripe.Subscription;
-//         // Start the workflow with event.id as the idempotency key without waiting for it to finish
-//         await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(subscription.id, subscription.customer as string);
-//         break;
-//       }
-//       // Handle the event when a user completes payment for a subscription
-//       case 'checkout.session.completed': {
-//         const checkout = event.data.object as Stripe.Checkout.Session;
-//         if (checkout.mode === 'subscription') {
-//           await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(checkout.subscription as string, checkout.customer as string);
-//         }
-//         break;
-//       }
-//       default:
-//         ctxt.logger.info(`Unhandled event type ${event.type}`);
-//     }
-//   }
-// }
+// Stripe webhook endpoint
+fastify.post('/stripe_webhook', {
+  config: {
+    rawBody: true
+  },
+}, async function (request, reply) {
+  // Verify the request is actually from Stripe
+  let event: Stripe.Event;
+  try {
+    event = verifyStripeEvent(request.rawBody, request.headers);
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(400).send('Invalid Stripe signature');
+  }
+
+  switch (event.type) {
+    // Handle events when a user subscribes, cancels, or updates their subscription
+    case 'customer.subscription.created':
+    case 'customer.subscription.deleted':
+    case 'customer.subscription.updated': {
+      const subscription = event.data.object as Stripe.Subscription;
+      // Start the workflow with event.id as the idempotency key without waiting for it to finish
+      // await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(subscription.id, subscription.customer as string);
+      break;
+    }
+    // Handle the event when a user completes payment for a subscription
+    case 'checkout.session.completed': {
+      const checkout = event.data.object as Stripe.Checkout.Session;
+      if (checkout.mode === 'subscription') {
+        // await ctxt.startWorkflow(Utils, event.id).stripeEventWorkflow(checkout.subscription as string, checkout.customer as string);
+      }
+      break;
+    }
+    default:
+      DBOS.logger.info(`Unhandled event type ${event.type}`);
+  }
+  return reply.code(200).send({ received: true });
+})
 
 // // Endpoints to retrieve Stripe session URLs
 // @Authentication(Utils.userAuthMiddleware)

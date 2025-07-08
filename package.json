@@ -1,6 +1,7 @@
 {
   "name": "dbos",
   "version": "0.0.1",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "test": "npx knex migrate:up && jest --detectOpenHandles",
@@ -22,6 +23,7 @@
     "@dbos-inc/dbos-sdk": "^3.0.27-preview",
     "axios": "^1.7.4",
     "fastify": "^5.4.0",
+    "fastify-raw-body": "^5.0.0",
     "stripe": "^14.22.0"
   }
 }

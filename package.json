@@ -3,13 +3,13 @@
   "version": "0.0.1",
   "scripts": {
     "build": "tsc",
-    "test": "npx dbos migrate && jest --detectOpenHandles",
+    "test": "npx knex migrate:up && jest --detectOpenHandles",
     "lint": "eslint src",
-    "lint-fix": "eslint --fix src"
+    "lint-fix": "eslint --fix src",
+    "start": "node dist/endpoints.js"
   },
   "devDependencies": {
     "@dbos-inc/dbos-cloud": "^1.23.8",
-    "@dbos-inc/eslint-plugin": "^3.3.3",
     "@types/jest": "^29.5.5",
     "@types/supertest": "^2.0.14",
     "eslint": "^8.56.0",
@@ -21,8 +21,7 @@
   "dependencies": {
     "@dbos-inc/dbos-sdk": "^3.0.27-preview",
     "axios": "^1.7.4",
-    "jwks-rsa": "^3.1.0",
-    "koa-jwt": "^4.0.4",
+    "fastify": "^5.4.0",
     "stripe": "^14.22.0"
   }
 }

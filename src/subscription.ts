@@ -24,10 +24,9 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
   if (typeof sigHeader !== 'string') {
     throw new Error("Invalid stripe request, no stripe-signature header");
   }
-  let event: Stripe.Event;
   const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
-  event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+  const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
   return event;
 }
 
@@ -159,7 +158,6 @@ class Utils {
     if (!refreshToken) {
       throw new Error("No refresh token found");
     }
-    // eslint-disable-next-line no-secrets/no-secrets
     const DBOSAuth0ClientID = DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
     const loginRequest = {
       method: 'POST',

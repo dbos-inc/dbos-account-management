@@ -11,10 +11,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@dbos-inc/dbos-cloud": "^1.23.8",
     "@eslint/js": "^9.30.1",
-    "@types/jest": "^29.5.5",
-    "@types/supertest": "^2.0.14",
     "eslint": "^9.30.1",
     "eslint-config-prettier": "^10.1.5",
     "globals": "^16.3.0",
@@ -22,9 +19,7 @@
     "jest": "^29.7.0",
     "lint-staged": "^16.1.2",
     "prettier": "^3.6.2",
-    "supertest": "^6.3.3",
     "ts-jest": "^29.1.1",
-    "ts-node": "^10.9.2",
     "typescript": "^5.2.2",
     "typescript-eslint": "^8.36.0"
   },
@@ -39,6 +34,6 @@
     "stripe": "^14.22.0"
   },
   "lint-staged": {
-    "**/*.{js,jsx,ts,tsx,json,css,scss,md}": "prettier --write"
+    "**/*.{js,jsx,ts,tsx,json,css,scss,md}": "npx prettier --write"
   }
 }

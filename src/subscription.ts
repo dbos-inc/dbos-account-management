@@ -3,11 +3,15 @@ import Stripe from 'stripe';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import axios from 'axios';
 import { KnexDataSource } from '@dbos-inc/knex-datasource';
+import Fastify from 'fastify';
+import rawBodyPlugin from 'fastify-raw-body';
+import { fastifyJwtJwks } from 'fastify-jwt-jwks';
+import cors from '@fastify/cors';
 
 const DBOSDomain = process.env.APP_DBOS_DOMAIN;
 const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? '';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-const dataSource = new KnexDataSource('knex-ds', { client: 'pg', connection: process.env.DBOS_DATABASE_URL });
+export const dataSource = new KnexDataSource('knex-ds', { client: 'pg', connection: process.env.DBOS_DATABASE_URL });
 
 export const DBOSLoginDomain = DBOSDomain === 'cloud.dbos.dev' ? 'login.dbos.dev' : 'dbos-inc.us.auth0.com';
 
@@ -31,8 +35,16 @@ const updateCloudEntitlement = DBOS.registerStep(updateCloudEntitlementImpl, {
   retriesAllowed: true,
 });
 
-const findStripeCustomerID = dataSource.registerTransaction(findStripeCustomerIDImpl, {
+export const findStripeCustomerID = dataSource.registerTransaction(findStripeCustomerIDImpl, {
   name: 'findStripeCustomerID',
+  readOnly: true,
+});
+export const recordStripeCustomer = dataSource.registerTransaction(recordStripeCustomerImpl, {
+  name: 'recordStripeCustomer',
+  readOnly: false,
+});
+export const findAuth0UserID = dataSource.registerTransaction(findAuth0UserIDImpl, {
+  name: 'findAuth0UserID',
   readOnly: true,
 });
 
@@ -82,7 +94,7 @@ async function stripeEventWorkflowImpl(subscriptionID: string, customerID: strin
   });
 
   // Map the Stripe customer ID to DBOS Cloud user ID
-  const dbosAuthID = await dataSource.runTransaction(() => findAuth0UserID(customerID), { name: 'findAuth0UserID' });
+  const dbosAuthID = await findAuth0UserID(customerID);
 
   // Send a request to the DBOS Cloud admin API to change the user's subscription status
   switch (status) {
@@ -115,9 +127,9 @@ async function getSubscriptionStatus(subscriptionID: string): Promise<Stripe.Sub
 }
 
 // Find the Auth0 user ID corresponding to a Stripe customer ID
-async function findAuth0UserID(stripeCustomerID: string): Promise<string> {
-  const client = dataSource.client;
-  const res = await client<Accounts>('accounts')
+async function findAuth0UserIDImpl(stripeCustomerID: string): Promise<string> {
+  const res = await dataSource
+    .client<Accounts>('accounts')
     .select('auth0_subject_id')
     .where('stripe_customer_id', stripeCustomerID)
     .first();
@@ -247,9 +259,7 @@ async function createSubscriptionImpl(
       maxAttempts: 3,
       intervalSeconds: 10,
     });
-    await dataSource.runTransaction(() => recordStripeCustomer(auth0UserID, stripeCustomerID!, userEmail), {
-      name: 'recordStripeCustomer',
-    });
+    await recordStripeCustomer(auth0UserID, stripeCustomerID!, userEmail);
   }
 
   // Finally, create a Stripe checkout session.
@@ -286,7 +296,7 @@ async function createStripeCustomer(auth0UserID: string, userEmail: string): Pro
 }
 
 // Insert a mapping between a customer's Auth0 user ID and Stripe customer ID
-async function recordStripeCustomer(auth0UserID: string, stripeCustomerID: string, email: string): Promise<void> {
+async function recordStripeCustomerImpl(auth0UserID: string, stripeCustomerID: string, email: string): Promise<void> {
   const res = await dataSource
     .client<Accounts>('accounts')
     .insert<{ rowCount: number }>({
@@ -347,4 +357,167 @@ async function createStripeBillingPortal(customerID: string, returnUrl: string):
     return_url: returnUrl,
   });
   return session.url;
+}
+
+export async function buildEndpoints() {
+  const fastify = Fastify({ logger: true });
+
+  // Enable CORS
+  await fastify.register(cors, {
+    origin: ['https://dbos.webflow.io', /\.?dbos\.dev$/, /^http:\/\/localhost:\d+$/],
+    methods: ['GET', 'HEAD', 'PUT', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true,
+  });
+
+  // Register raw body plugin before route registration
+  await fastify.register(rawBodyPlugin, {
+    field: 'rawBody',
+    global: false,
+    runFirst: true,
+  });
+
+  // Register the JWT plugin for authentication
+  await fastify.register(fastifyJwtJwks, {
+    jwksUrl: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
+    audience: 'dbos-cloud-api',
+  });
+
+  // Stripe webhook endpoint
+  fastify.post(
+    '/stripe_webhook',
+    {
+      config: {
+        rawBody: true,
+      },
+    },
+    async function (request, reply) {
+      // Verify the request is actually from Stripe
+      let event: Stripe.Event;
+      try {
+        event = verifyStripeEvent(request.rawBody, request.headers);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.code(400).send('Invalid Stripe signature');
+      }
+
+      switch (event.type) {
+        // Handle events when a user subscribes, cancels, or updates their subscription
+        case 'customer.subscription.created':
+        case 'customer.subscription.deleted':
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as Stripe.Subscription;
+          // Start the workflow with event.id as the idempotency key without waiting for it to finish
+          await DBOS.startWorkflow(stripeEventWorkflow, { workflowID: event.id })(
+            subscription.id,
+            subscription.customer as string,
+          );
+          break;
+        }
+        // Handle the event when a user completes payment for a subscription
+        case 'checkout.session.completed': {
+          const checkout = event.data.object as Stripe.Checkout.Session;
+          if (checkout.mode === 'subscription') {
+            await DBOS.startWorkflow(stripeEventWorkflow, { workflowID: event.id })(
+              checkout.subscription as string,
+              checkout.customer as string,
+            );
+          }
+          break;
+        }
+        default:
+          DBOS.logger.info(`Unhandled event type ${event.type}`);
+      }
+      return reply.code(200).send({ received: true });
+    },
+  );
+
+  // Retrieve a Stripe checkout session URL for an authenticated customer
+  fastify.post(
+    '/subscribe',
+    {
+      preValidation: fastify.authenticate,
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            success_url: { type: 'string', format: 'uri' },
+            cancel_url: { type: 'string', format: 'uri' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', format: 'uri' },
+            },
+          },
+        },
+      },
+    },
+    async function (request, reply) {
+      const auth0User = request.user as Auth0User;
+      try {
+        authorizeUser(auth0User);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.code(403).send('Forbidden: User not authorized');
+      }
+
+      const { success_url, cancel_url } = request.body as { success_url: string; cancel_url: string };
+      const successUrl = success_url ?? 'https://console.dbos.dev';
+      const cancelUrl = cancel_url ?? 'https://www.dbos.dev/pricing';
+      const sessionURL = await createSubscription(
+        auth0User.sub,
+        auth0User['https://dbos.dev/email'],
+        successUrl,
+        cancelUrl,
+      );
+      if (!sessionURL) {
+        return reply.code(500).send('Failed to create subscription session');
+      }
+
+      return reply.code(200).send({ url: sessionURL });
+    },
+  );
+
+  // Retrieve a Stripe customer portal session URL for an authenticated user
+  fastify.post(
+    '/create-customer-portal',
+    {
+      preValidation: fastify.authenticate,
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            return_url: { type: 'string', format: 'uri' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', format: 'uri' },
+            },
+          },
+        },
+      },
+    },
+    async function (request, reply) {
+      const auth0User = request.user as Auth0User;
+      try {
+        authorizeUser(auth0User);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.code(403).send('Forbidden: User not authorized');
+      }
+
+      const { return_url } = request.body as { return_url: string };
+      const returnUrl = return_url ?? 'https://www.dbos.dev/pricing';
+      const sessionURL = await createStripeCustomerPortal(auth0User.sub, returnUrl);
+
+      return reply.code(200).send({ url: sessionURL });
+    },
+  );
+
+  return fastify;
 }

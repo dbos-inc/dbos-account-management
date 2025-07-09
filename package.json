@@ -30,6 +30,7 @@
   "dependencies": {
     "@dbos-inc/dbos-sdk": "^3.0.27-preview",
     "@dbos-inc/knex-datasource": "^3.0.27-preview",
+    "@fastify/cors": "^11.0.1",
     "axios": "^1.7.4",
     "fastify": "^5.4.0",
     "fastify-jwt-jwks": "^2.0.2",
@@ -37,6 +38,6 @@
     "stripe": "^14.22.0"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,css,scss,md}": "prettier --write"
+    "**/*.{js,jsx,ts,tsx,json,css,scss,md}": "prettier --write"
   }
 }

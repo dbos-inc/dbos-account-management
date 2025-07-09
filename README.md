@@ -3,6 +3,7 @@
 This repository contains code for the DBOS Cloud account management app, which is built with [DBOS Transact](https://github.com/dbos-inc/dbos-transact) and [Stripe](https://stripe.com/) and deployed on [DBOS Cloud](https://www.dbos.dev/).
 
 ## Overview
+
 When a customer clicks "Upgrade to DBOS Pro" on the [DBOS website](https://www.dbos.dev/pricing), this app redirects them to a customized Stripe checkout page, where they enter payment information. After they pay, Stripe sends a notification to a webhook endpoint on this app. The webhook retrieves the customer's updated subscription status from Stripe, maps their Stripe customer ID to a DBOS Cloud account ID, and updates their subscription status in DBOS Cloud.
 
 This repo demonstrates a complete production DBOS application, including cloud deployment and CI/CD, written in <500 lines of code. Specifically, it highlights:
@@ -18,6 +19,7 @@ This repo demonstrates a complete production DBOS application, including cloud d
 ## Code Layout
 
 The main source code files:
+
 - `src/`
   - `endpoints.ts` HTTP endpoints
   - `subscription.ts` Workflows, transactions, and communicators for subscriptions
@@ -26,6 +28,7 @@ The main source code files:
 - `migrations/` Schema definition in Knex.js format
 
 Files for CI/CD:
+
 - `scripts/`
   - `dbos_deploy.sh` Script that deploys this app to DBOS Cloud
   - `subscription_integration_test.py` Automated integration test for subscription that runs against staging and prod

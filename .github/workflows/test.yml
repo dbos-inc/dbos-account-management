@@ -2,7 +2,7 @@ name: Run unit tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
     types:
       - ready_for_review

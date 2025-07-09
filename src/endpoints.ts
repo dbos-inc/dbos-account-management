@@ -1,8 +1,9 @@
 import Fastify from 'fastify';
 import rawBodyPlugin from 'fastify-raw-body';
+import { fastifyJwtJwks } from 'fastify-jwt-jwks';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
-import { verifyStripeEvent, stripeEventWorkflow } from './subscription.js';
+import { verifyStripeEvent, stripeEventWorkflow, DBOSLoginDomain, authorizeUser, Auth0User, createSubscription } from './subscription.js';
 
 const fastify = Fastify({logger: true});
 
@@ -11,6 +12,12 @@ await fastify.register(rawBodyPlugin, {
   field: 'rawBody',
   global: false,
   runFirst: true,
+});
+
+// Register the JWT plugin for authentication
+await fastify.register(fastifyJwtJwks, {
+  jwksUrl: `https://${DBOSLoginDomain}/.well-known/jwks.json`,
+  audience: 'dbos-cloud-api',
 });
 
 // Stripe webhook endpoint
@@ -55,27 +62,47 @@ fastify.post('/stripe_webhook', {
 // Endpoints to retrieve Stripe session URLs
 
 // Retrieve a Stripe checkout session URL for an authenticated customer
+fastify.post('/subscribe',
+  { preValidation: fastify.authenticate,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          success_url: { type: 'string', format: 'uri' },
+          cancel_url: { type: 'string', format: 'uri' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', format: 'uri' },
+          },
+        },
+      },
+    },
+  },
+  async function (request, reply) {
+    const auth0User = request.user as Auth0User;
+    try {
+      authorizeUser(auth0User)
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(403).send('Forbidden: User not authorized');
+    }
 
+    const { success_url, cancel_url } = request.body as {success_url: string, cancel_url: string};;
+    const successUrl = success_url ?? 'https://console.dbos.dev';
+    const cancelUrl = cancel_url ?? 'https://www.dbos.dev/pricing';
+    const sessionURL = await createSubscription(auth0User.sub, auth0User["https://dbos.dev/email"], successUrl, cancelUrl);
+
+    return reply.code(200).send({ url: sessionURL });
+  }
+);
 
 // @Authentication(Utils.userAuthMiddleware)
 // @KoaMiddleware(Utils.auth0JwtVerifier)
 // export class CloudSubscription {
-//   // Retrieve a Stripe checkout sesion URL for an authenticated customer
-//   @RequiredRole(['user'])
-//   @PostApi('/subscribe')
-//   static async subscribePlan(ctxt: HandlerContext) {
-//     const auth0UserID = ctxt.authenticatedUser;
-//     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-//     const userEmail = ctxt.koaContext.state.user["https://dbos.dev/email"] as string;
-//     const body = ctxt.request.body as {success_url: string, cancel_url: string};
-//     const successUrl = body.success_url ?? 'https://console.dbos.dev';
-//     const cancelUrl = body.cancel_url ?? 'https://www.dbos.dev/pricing';
-//     const sessionURL = await ctxt.invokeWorkflow(Utils).createSubscription(auth0UserID, userEmail, successUrl, cancelUrl);
-//     if (!sessionURL) {
-//       throw new DBOSResponseError("Failed to create a checkout session!", 500);
-//     }
-//     return { url: sessionURL };
-//   }
 
 //   // Retrieve a Stripe customer portal URL for an authenticated customer
 //   @RequiredRole(['user'])

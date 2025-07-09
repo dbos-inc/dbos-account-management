@@ -24,6 +24,7 @@
     "@dbos-inc/knex-datasource": "^3.0.27-preview",
     "axios": "^1.7.4",
     "fastify": "^5.4.0",
+    "fastify-jwt-jwks": "^2.0.2",
     "fastify-raw-body": "^5.0.0",
     "stripe": "^14.22.0"
   }

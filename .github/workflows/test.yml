@@ -51,3 +51,4 @@ jobs:
           PGPASSWORD: dbos
           APP_DBOS_DOMAIN: staging.dev.dbos.dev
           DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
+          DBOS_DATABASE_URL: postgresql://postgres:dbos@localhost:5432/dbos?sslmode=disable

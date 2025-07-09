@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import rawBodyPlugin from 'fastify-raw-body';
 import { fastifyJwtJwks } from 'fastify-jwt-jwks';
+import cors from '@fastify/cors';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import {
@@ -14,6 +15,13 @@ import {
 } from './subscription.js';
 
 const fastify = Fastify({ logger: true });
+
+// Enable CORS
+await fastify.register(cors, {
+  origin: ['https://dbos.webflow.io', /\.?dbos\.dev$/, /^http:\/\/localhost:\d+$/],
+  methods: ['GET', 'HEAD', 'PUT', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+});
 
 // Register raw body plugin before route registration
 await fastify.register(rawBodyPlugin, {

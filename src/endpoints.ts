@@ -85,8 +85,6 @@ fastify.post(
   },
 );
 
-// Endpoints to retrieve Stripe session URLs
-
 // Retrieve a Stripe checkout session URL for an authenticated customer
 fastify.post(
   '/subscribe',
@@ -136,6 +134,7 @@ fastify.post(
   },
 );
 
+// Retrieve a Stripe customer portal session URL for an authenticated user
 fastify.post(
   '/create-customer-portal',
   {

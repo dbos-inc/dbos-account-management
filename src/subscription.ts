@@ -4,16 +4,37 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import axios from 'axios';
 import { KnexDataSource } from '@dbos-inc/knex-datasource';
 
+const DBOSDomain = process.env.APP_DBOS_DOMAIN;
+const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? '';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const dataSource = new KnexDataSource('knex-ds', { client: 'pg', connection: process.env.DBOS_DATABASE_URL });
 
-const DBOSDomain = process.env.APP_DBOS_DOMAIN;
 export const DBOSLoginDomain = DBOSDomain === 'cloud.dbos.dev' ? 'login.dbos.dev' : 'dbos-inc.us.auth0.com';
-const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? '';
+
 const DBOSPlans = {
   free: 'free',
   pro: 'pro',
 };
+
+// Register all DBOS workflows and steps
+export const stripeEventWorkflow = DBOS.registerWorkflow(stripeEventWorkflowImpl, { name: 'stripeEventWorkflow' });
+export const createSubscription = DBOS.registerWorkflow(createSubscriptionImpl, { name: 'createSubscription' });
+export const createStripeCustomerPortal = DBOS.registerWorkflow(createStripeCustomerPortalImpl, {
+  name: 'createStripeCustomerPortal',
+});
+
+const updateCloudEntitlement = DBOS.registerStep(updateCloudEntitlementImpl, {
+  name: 'updateCloudEntitlement',
+  intervalSeconds: 10,
+  maxAttempts: 20,
+  backoffRate: 1.2,
+  retriesAllowed: true,
+});
+
+const findStripeCustomerID = dataSource.registerTransaction(findStripeCustomerIDImpl, {
+  name: 'findStripeCustomerID',
+  readOnly: true,
+});
 
 // Utility function verifying that a webhook event originated from Stripe
 export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: IncomingHttpHeaders) {
@@ -28,6 +49,27 @@ export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: Incomi
 
   const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
   return event;
+}
+
+export interface Auth0User {
+  'https://dbos.dev/email': string;
+  sub: string;
+}
+
+// Check if the request user is authenticated and has a valid Auth0 user ID
+export function authorizeUser(requestUser?: Auth0User) {
+  if (!requestUser) {
+    throw new Error('No authenticated DBOS User!');
+  }
+  const authenticatedUser = requestUser.sub;
+  if (!authenticatedUser) {
+    throw new Error('No valid DBOS user found!');
+  }
+  const userEmail = requestUser['https://dbos.dev/email'];
+  if (!userEmail) {
+    throw new Error('No email found for the authenticated user');
+  }
+  DBOS.logger.info(`Authenticated user: ${authenticatedUser}, email: ${userEmail}`);
 }
 
 // Workflow to process Stripe events sent to the webhook endpoint
@@ -57,9 +99,6 @@ async function stripeEventWorkflowImpl(subscriptionID: string, customerID: strin
       DBOS.logger.info(`Do nothing for ${status} status.`);
   }
 }
-
-// Register the workflow with DBOS
-export const stripeEventWorkflow = DBOS.registerWorkflow(stripeEventWorkflowImpl, { name: 'stripeEventWorkflow' });
 
 // Retrieve the status of a subscription from Stripe
 async function getSubscriptionStatus(subscriptionID: string): Promise<Stripe.Subscription.Status> {
@@ -141,15 +180,6 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
   }
 }
 
-// Register the step with DBOS and configure automatic retries
-const updateCloudEntitlement = DBOS.registerStep(updateCloudEntitlementImpl, {
-  name: 'updateCloudEntitlement',
-  intervalSeconds: 10,
-  maxAttempts: 20,
-  backoffRate: 1.2,
-  retriesAllowed: true,
-});
-
 interface Accounts {
   auth0_subject_id: string;
   email: string;
@@ -199,28 +229,8 @@ class Utils {
   }
 }
 
-export interface Auth0User {
-  'https://dbos.dev/email': string;
-  sub: string;
-}
-
-export function authorizeUser(requestUser?: Auth0User) {
-  if (!requestUser) {
-    throw new Error('No authenticated DBOS User!');
-  }
-  const authenticatedUser = requestUser.sub;
-  if (!authenticatedUser) {
-    throw new Error('No valid DBOS user found!');
-  }
-  const userEmail = requestUser['https://dbos.dev/email'];
-  if (!userEmail) {
-    throw new Error('No email found for the authenticated user');
-  }
-  DBOS.logger.info(`Authenticated user: ${authenticatedUser}, email: ${userEmail}`);
-}
-
 // Workflow to create a Stripe checkout session
-export async function createSubscriptionImpl(
+async function createSubscriptionImpl(
   auth0UserID: string,
   userEmail: string,
   successUrl: string,
@@ -252,8 +262,6 @@ export async function createSubscriptionImpl(
   return res;
 }
 
-export const createSubscription = DBOS.registerWorkflow(createSubscriptionImpl, { name: 'createSubscription' });
-
 // Find the Stripe customer ID corresponding to an Auth0 user ID
 async function findStripeCustomerIDImpl(auth0UserID: string): Promise<string | undefined> {
   const res = await dataSource
@@ -263,11 +271,6 @@ async function findStripeCustomerIDImpl(auth0UserID: string): Promise<string | u
     .first();
   return res === undefined ? undefined : res.stripe_customer_id;
 }
-
-const findStripeCustomerID = dataSource.registerTransaction(findStripeCustomerIDImpl, {
-  name: 'findStripeCustomerID',
-  readOnly: true,
-});
 
 // Create a customer in Stripe for an authenticated user
 async function createStripeCustomer(auth0UserID: string, userEmail: string): Promise<string> {
@@ -336,10 +339,6 @@ async function createStripeCustomerPortalImpl(auth0UserID: string, returnUrl: st
   });
   return sessionURL;
 }
-
-export const createStripeCustomerPortal = DBOS.registerWorkflow(createStripeCustomerPortalImpl, {
-  name: 'createStripeCustomerPortal',
-});
 
 // Create a Stripe billing portal for a customer
 async function createStripeBillingPortal(customerID: string, returnUrl: string): Promise<string | null> {

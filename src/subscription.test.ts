@@ -3,7 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import knex from 'knex';
 import path from 'path';
 
-import { buildEndpoints, findAuth0UserID, findStripeCustomerID, recordStripeCustomer } from './subscription.js';
+import { buildEndpoints, findAuth0UserID, findStripeCustomerID, recordStripeCustomer, Utils } from './subscription.js';
 
 describe('subscription-tests', () => {
   let fastify: FastifyInstance;
@@ -149,13 +149,13 @@ describe('subscription-tests', () => {
   });
 
   // Test retrieve cloud credentials
-  // test("cloud-credential", async () => {
-  //   if (!process.env.DBOS_LOGIN_REFRESH_TOKEN || process.env.DBOS_LOGIN_REFRESH_TOKEN == "null") {
-  //     console.log("Skipping cloud-credentials test, no refresh token provided");
-  //     return;
-  //   }
-  //   await expect(Utils.retrieveAccessToken()).resolves.toBeTruthy();
-  //   process.env["DBOS_LOGIN_REFRESH_TOKEN"] = "faketoken";
-  //   await expect(Utils.retrieveAccessToken()).rejects.toThrow();
-  // });
+  test('cloud-credential', async () => {
+    if (!process.env.DBOS_LOGIN_REFRESH_TOKEN || process.env.DBOS_LOGIN_REFRESH_TOKEN == 'null') {
+      console.log('Skipping cloud-credentials test, no refresh token provided');
+      return;
+    }
+    await expect(Utils.retrieveAccessToken()).resolves.toBeTruthy();
+    process.env['DBOS_LOGIN_REFRESH_TOKEN'] = 'faketoken';
+    await expect(Utils.retrieveAccessToken()).rejects.toThrow();
+  });
 });

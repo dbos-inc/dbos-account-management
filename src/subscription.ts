@@ -48,42 +48,6 @@ export const findAuth0UserID = dataSource.registerTransaction(findAuth0UserIDImp
   readOnly: true,
 });
 
-// Utility function verifying that a webhook event originated from Stripe
-export function verifyStripeEvent(payload?: string | Buffer, reqHeaders?: IncomingHttpHeaders) {
-  if (payload === undefined || reqHeaders === undefined) {
-    throw new Error('Invalid stripe request, no request headers or payload');
-  }
-  const sigHeader = reqHeaders['stripe-signature'];
-  if (typeof sigHeader !== 'string') {
-    throw new Error('Invalid stripe request, no stripe-signature header');
-  }
-  const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
-
-  const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
-  return event;
-}
-
-export interface Auth0User {
-  'https://dbos.dev/email': string;
-  sub: string;
-}
-
-// Check if the request user is authenticated and has a valid Auth0 user ID
-export function authorizeUser(requestUser?: Auth0User) {
-  if (!requestUser) {
-    throw new Error('No authenticated DBOS User!');
-  }
-  const authenticatedUser = requestUser.sub;
-  if (!authenticatedUser) {
-    throw new Error('No valid DBOS user found!');
-  }
-  const userEmail = requestUser['https://dbos.dev/email'];
-  if (!userEmail) {
-    throw new Error('No email found for the authenticated user');
-  }
-  DBOS.logger.info(`Authenticated user: ${authenticatedUser}, email: ${userEmail}`);
-}
-
 // Workflow to process Stripe events sent to the webhook endpoint
 async function stripeEventWorkflowImpl(subscriptionID: string, customerID: string) {
   // Retrieve the updated subscription from Stripe
@@ -189,55 +153,6 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
     };
     const res = await axios.request(slackRequest);
     DBOS.logger.info(`Sent slack notification, response: ${res.status}`);
-  }
-}
-
-interface Accounts {
-  auth0_subject_id: string;
-  email: string;
-  stripe_customer_id: string;
-  created_at: number;
-  updated_at: number;
-}
-
-interface RefreshTokenAuthResponse {
-  access_token: string;
-  scope: string;
-  expires_in: number;
-  token_type: string;
-}
-
-class Utils {
-  static dbosAuth0Token: string | undefined;
-  static lastTokenFetch = 0;
-  // Securely retrieve an access token from Auth0 authorizing this app to use the DBOS Cloud admin API
-  static async retrieveAccessToken(): Promise<string> {
-    const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
-    if (!refreshToken) {
-      throw new Error('No refresh token found');
-    }
-    const DBOSAuth0ClientID =
-      DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
-    const loginRequest = {
-      method: 'POST',
-      url: `https://${DBOSLoginDomain}/oauth/token`,
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: {
-        grant_type: 'refresh_token',
-        client_id: DBOSAuth0ClientID,
-        refresh_token: refreshToken,
-      },
-    };
-    try {
-      Utils.dbosAuth0Token = undefined;
-      const response = await axios.request(loginRequest);
-      const tokenResponse = response.data as RefreshTokenAuthResponse;
-      Utils.dbosAuth0Token = tokenResponse.access_token;
-      return tokenResponse.access_token;
-    } catch (err) {
-      Utils.dbosAuth0Token = undefined;
-      throw err;
-    }
   }
 }
 
@@ -359,6 +274,92 @@ async function createStripeBillingPortal(customerID: string, returnUrl: string):
   return session.url;
 }
 
+interface Accounts {
+  auth0_subject_id: string;
+  email: string;
+  stripe_customer_id: string;
+  created_at: number;
+  updated_at: number;
+}
+
+interface RefreshTokenAuthResponse {
+  access_token: string;
+  scope: string;
+  expires_in: number;
+  token_type: string;
+}
+
+interface Auth0User {
+  'https://dbos.dev/email': string;
+  sub: string;
+}
+
+export class Utils {
+  static dbosAuth0Token: string | undefined;
+  static lastTokenFetch = 0;
+
+  // Utility function verifying that a webhook event originated from Stripe
+  static verifyStripeEvent(payload?: string | Buffer, reqHeaders?: IncomingHttpHeaders) {
+    if (payload === undefined || reqHeaders === undefined) {
+      throw new Error('Invalid stripe request, no request headers or payload');
+    }
+    const sigHeader = reqHeaders['stripe-signature'];
+    if (typeof sigHeader !== 'string') {
+      throw new Error('Invalid stripe request, no stripe-signature header');
+    }
+    const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
+
+    const event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
+    return event;
+  }
+
+  // Check if the request user is authenticated and has a valid Auth0 user ID
+  static authorizeUser(requestUser?: Auth0User) {
+    if (!requestUser) {
+      throw new Error('No authenticated DBOS User!');
+    }
+    const authenticatedUser = requestUser.sub;
+    if (!authenticatedUser) {
+      throw new Error('No valid DBOS user found!');
+    }
+    const userEmail = requestUser['https://dbos.dev/email'];
+    if (!userEmail) {
+      throw new Error('No email found for the authenticated user');
+    }
+    DBOS.logger.info(`Authenticated user: ${authenticatedUser}, email: ${userEmail}`);
+  }
+
+  // Securely retrieve an access token from Auth0 authorizing this app to use the DBOS Cloud admin API
+  static async retrieveAccessToken(): Promise<string> {
+    const refreshToken = process.env.DBOS_LOGIN_REFRESH_TOKEN;
+    if (!refreshToken) {
+      throw new Error('No refresh token found');
+    }
+    const DBOSAuth0ClientID =
+      DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
+    const loginRequest = {
+      method: 'POST',
+      url: `https://${DBOSLoginDomain}/oauth/token`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      data: {
+        grant_type: 'refresh_token',
+        client_id: DBOSAuth0ClientID,
+        refresh_token: refreshToken,
+      },
+    };
+    try {
+      Utils.dbosAuth0Token = undefined;
+      const response = await axios.request(loginRequest);
+      const tokenResponse = response.data as RefreshTokenAuthResponse;
+      Utils.dbosAuth0Token = tokenResponse.access_token;
+      return tokenResponse.access_token;
+    } catch (err) {
+      Utils.dbosAuth0Token = undefined;
+      throw err;
+    }
+  }
+}
+
 export async function buildEndpoints() {
   const fastify = Fastify({ logger: true });
 
@@ -394,7 +395,7 @@ export async function buildEndpoints() {
       // Verify the request is actually from Stripe
       let event: Stripe.Event;
       try {
-        event = verifyStripeEvent(request.rawBody, request.headers);
+        event = Utils.verifyStripeEvent(request.rawBody, request.headers);
       } catch (error) {
         fastify.log.error(error);
         return reply.code(400).send('Invalid Stripe signature');
@@ -457,7 +458,7 @@ export async function buildEndpoints() {
     async function (request, reply) {
       const auth0User = request.user as Auth0User;
       try {
-        authorizeUser(auth0User);
+        Utils.authorizeUser(auth0User);
       } catch (error) {
         fastify.log.error(error);
         return reply.code(403).send('Forbidden: User not authorized');
@@ -505,7 +506,7 @@ export async function buildEndpoints() {
     async function (request, reply) {
       const auth0User = request.user as Auth0User;
       try {
-        authorizeUser(auth0User);
+        Utils.authorizeUser(auth0User);
       } catch (error) {
         fastify.log.error(error);
         return reply.code(403).send('Forbidden: User not authorized');

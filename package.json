@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npx knex migrate:latest && jest --detectOpenHandles",
+    "test": "npx dbos migrate",
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "start": "node dist/endpoints.js"

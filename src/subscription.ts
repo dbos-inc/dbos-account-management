@@ -277,30 +277,25 @@ async function createStripeCheckout(stripeCustomerID: string, successUrl: string
   return session.url;
 }
 
-// export class Utils {
+// Workflow to create a Stripe customer portal
+async function createStripeCustomerPortalImpl(auth0UserID: string, returnUrl: string): Promise<string|null> {
+  const stripeCustomerID = await findStripeCustomerID(auth0UserID);
+  if (!stripeCustomerID) {
+    DBOS.logger.error(`Cannot find stripe customer for user ${auth0UserID}`);
+    return null;
+  }
+  const sessionURL = await DBOS.runStep(() => createStripeBillingPortal(stripeCustomerID, returnUrl), {name: "createStripeBillingPortal", retriesAllowed: true, maxAttempts: 3, intervalSeconds: 10});
+  return sessionURL;
+}
 
+export const createStripeCustomerPortal = DBOS.registerWorkflow(createStripeCustomerPortalImpl, {name: "createStripeCustomerPortal"});
 
-//   // Workflow to create a Stripe customer portal
-//   @Workflow()
-//   static async createStripeCustomerPortal(ctxt: WorkflowContext, auth0UserID: string, returnUrl: string): Promise<string|null> {
-//     const stripeCustomerID = await ctxt.invoke(Utils).findStripeCustomerID(auth0UserID);
-//     if (!stripeCustomerID) {
-//       ctxt.logger.error(`Cannot find stripe customer for user ${auth0UserID}`);
-//       return null;
-//     }
-//     const sessionURL = await ctxt.invoke(Utils).createStripeBillingPortal(stripeCustomerID, returnUrl);
-//     return sessionURL;
-//   }
-
-//   // Create a Stripe billing portal for a customer
-//   @Communicator({intervalSeconds: 10, maxAttempts: 2})
-//   static async createStripeBillingPortal(_ctxt: CommunicatorContext, customerID: string, returnUrl: string): Promise<string|null> {
-//     const session = await stripe.billingPortal.sessions.create({
-//       customer: customerID,
-//       return_url: returnUrl,
-//     });
-//     return session.url;
-//   }
-
-// }
+// Create a Stripe billing portal for a customer
+async function createStripeBillingPortal(customerID: string, returnUrl: string): Promise<string|null> {
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerID,
+    return_url: returnUrl,
+  });
+  return session.url;
+}
 

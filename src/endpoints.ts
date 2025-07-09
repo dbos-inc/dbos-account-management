@@ -3,7 +3,7 @@ import rawBodyPlugin from 'fastify-raw-body';
 import { fastifyJwtJwks } from 'fastify-jwt-jwks';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
-import { verifyStripeEvent, stripeEventWorkflow, DBOSLoginDomain, authorizeUser, Auth0User, createSubscription } from './subscription.js';
+import { verifyStripeEvent, stripeEventWorkflow, DBOSLoginDomain, authorizeUser, Auth0User, createSubscription, createStripeCustomerPortal } from './subscription.js';
 
 const fastify = Fastify({logger: true});
 
@@ -91,32 +91,53 @@ fastify.post('/subscribe',
       return reply.code(403).send('Forbidden: User not authorized');
     }
 
-    const { success_url, cancel_url } = request.body as {success_url: string, cancel_url: string};;
+    const { success_url, cancel_url } = request.body as {success_url: string, cancel_url: string};
     const successUrl = success_url ?? 'https://console.dbos.dev';
     const cancelUrl = cancel_url ?? 'https://www.dbos.dev/pricing';
     const sessionURL = await createSubscription(auth0User.sub, auth0User["https://dbos.dev/email"], successUrl, cancelUrl);
+    if (!sessionURL) {
+      return reply.code(500).send('Failed to create subscription session');
+    }
 
     return reply.code(200).send({ url: sessionURL });
   }
 );
 
-// @Authentication(Utils.userAuthMiddleware)
-// @KoaMiddleware(Utils.auth0JwtVerifier)
-// export class CloudSubscription {
+fastify.post('/create-customer-portal',
+  { preValidation: fastify.authenticate,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          return_url: { type: 'string', format: 'uri' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', format: 'uri' },
+          },
+        },
+      },
+    },
+  },
+  async function (request, reply) {
+    const auth0User = request.user as Auth0User;
+    try {
+      authorizeUser(auth0User)
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(403).send('Forbidden: User not authorized');
+    }
 
-//   // Retrieve a Stripe customer portal URL for an authenticated customer
-//   @RequiredRole(['user'])
-//   @PostApi('/create-customer-portal')
-//   static async createCustomerPortal(ctxt: HandlerContext) {
-//     const auth0User = ctxt.authenticatedUser;
-//     const returnUrl = (ctxt.request.body as {return_url: string}).return_url ?? 'https://www.dbos.dev/pricing';
-//     const sessionURL = await ctxt.invokeWorkflow(Utils).createStripeCustomerPortal(auth0User, returnUrl);
-//     if (!sessionURL) {
-//       throw new DBOSResponseError("Failed to create customer portal!", 500);
-//     }
-//     return { url: sessionURL };
-//   }
-// }
+    const { return_url } = request.body as {return_url: string};
+    const returnUrl = return_url ?? 'https://www.dbos.dev/pricing';
+    const sessionURL = await createStripeCustomerPortal(auth0User.sub, returnUrl);
+
+    return reply.code(200).send({ url: sessionURL });
+  }
+);
 
 async function main() {
   const PORT = Number(process.env.PORT || 3000);

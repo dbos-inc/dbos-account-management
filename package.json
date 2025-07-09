@@ -7,7 +7,7 @@
     "test": "npx dbos migrate",
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
-    "start": "node dist/endpoints.js",
+    "start": "node dist/server.js",
     "prepare": "husky"
   },
   "devDependencies": {

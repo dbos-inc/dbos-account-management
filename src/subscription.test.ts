@@ -10,9 +10,11 @@ describe('subscription-tests', () => {
 
   beforeAll(async () => {
     // Set up the database
-    const connectionString = new URL(
-      process.env.DBOS_DATABASE_URL || `postgresql://postgres@localhost:5432/dbos?sslmode=disable`,
-    );
+    if (!process.env.DBOS_DATABASE_URL) {
+      console.error('DBOS_DATABASE_URL not set!');
+      process.exit(1);
+    }
+    const connectionString = new URL(process.env.DBOS_DATABASE_URL);
     const appDBName = connectionString.pathname.split('/')[1];
     connectionString.pathname = '/postgres'; // Set the default database to 'postgres' for initial connection
     const cwd = process.cwd();

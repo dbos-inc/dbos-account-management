@@ -9,6 +9,9 @@ export class StripeWebhook {
     // Verify the request is actually from Stripe
     const req = ctxt.request;
     ctxt.logger.info(`debug secret: ${process.env.DEBUG_SECRET}`);
+    const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+    ctxt.logger.info(`Verifying Stripe event with secret: ${StripeWebhookSecret}`);
+
     const event = Utils.verifyStripeEvent(req.rawBody, req.headers);
 
     switch (event.type) {

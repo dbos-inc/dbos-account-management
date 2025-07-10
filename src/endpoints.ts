@@ -8,6 +8,7 @@ export class StripeWebhook {
   static async stripeWebhook(ctxt: HandlerContext) {
     // Verify the request is actually from Stripe
     const req = ctxt.request;
+    ctxt.logger.info(`debug secret: ${process.env.DEBUG_SECRET}`);
     const event = Utils.verifyStripeEvent(req.rawBody, req.headers);
 
     switch (event.type) {

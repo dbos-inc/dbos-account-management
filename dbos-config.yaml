@@ -15,15 +15,6 @@ database:
     - npx knex migrate:latest
   rollback:
     - npx knex migrate:rollback
-env:
-  APP_DBOS_DOMAIN: ${APP_DBOS_DOMAIN}
-  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-  DBOS_LOGIN_REFRESH_TOKEN: ${DBOS_LOGIN_REFRESH_TOKEN}
-  STRIPE_DBOS_PRO_PRICE: ${STRIPE_DBOS_PRO_PRICE}
-  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-  ZAZU_SLACK_TOKEN: ${ZAZU_SLACK_TOKEN}
-  ZAZU_SLACK_CHANNEL: ${ZAZU_SLACK_CHANNEL}
-  DBOS_TEST_USER: ${DBOS_TEST_USER}
 runtimeConfig:
   entrypoints:
     - "dist/endpoints.js"

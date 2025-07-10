@@ -24,14 +24,7 @@ jobs:
       - name: Deploy to staging
         run: bash scripts/dbos_deploy.sh
         env:
-          APP_DBOS_DOMAIN: staging.dev.dbos.dev
           DBOS_APP_NAME: staging
-          DBOS_APP_DB_NAME: testsubscription
-          STRIPE_SECRET_KEY: ${{secrets.STRIPE_TEST_SECRET_KEY}}
-          STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_TEST_WEBHOOK_SECRET}}
-          STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_TEST_PRO_PRICE}}
           DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
-          DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
+          DBOS_APP_DB_NAME: testsubscription
           DBOS_DB_PASSWORD: ${{secrets.DBOS_TEST_DB_PASSWORD}}
-          ZAZU_SLACK_TOKEN: ${{secrets.ZAZU_TEST_SLACK_TOKEN}}
-          ZAZU_SLACK_CHANNEL: ${{secrets.ZAZU_TEST_SLACK_CHANNEL}}

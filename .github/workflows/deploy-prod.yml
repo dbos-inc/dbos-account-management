@@ -22,15 +22,8 @@ jobs:
       - name: Deploy to prod
         run: bash scripts/dbos_deploy.sh
         env:
-          APP_DBOS_DOMAIN: cloud.dbos.dev
           DBOS_APP_NAME: dbos
-          DBOS_APP_DB_NAME: dbos_subscription
-          STRIPE_SECRET_KEY: ${{secrets.STRIPE_PROD_SECRET_KEY}}
-          STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_PROD_WEBHOOK_SECRET}}
-          STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_PROD_PRO_PRICE}}
           DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
-          DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
+          DBOS_APP_DB_NAME: dbos_subscription
           DBOS_DB_PASSWORD: ${{secrets.DBOS_PROD_DB_PASSWORD}}
-          ZAZU_SLACK_TOKEN: ${{secrets.ZAZU_SLACK_TOKEN}}
-          ZAZU_SLACK_CHANNEL: ${{secrets.ZAZU_SLACK_CHANNEL}}
-          DBOS_TEST_USER: ${{secrets.DBOS_TEST_USER}}
+

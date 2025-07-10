@@ -177,6 +177,7 @@ export class Utils {
     }
     let event: Stripe.Event;
     const StripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+    ctxt.logger.info(`Verifying Stripe event with secret: ${StripeWebhookSecret}`);
     try {
       event = stripe.webhooks.constructEvent(payload, sigHeader, StripeWebhookSecret);
     } catch (err) {

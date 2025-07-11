@@ -29,21 +29,23 @@ def test_endpoints(path: str):
     url = f"https://subscribe-{config.dbos_app_name}.cloud.dbos.dev/subscribe"
     headers = {
         'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
     }
     data = {
-        'plan': 'dbospro'
+        'success_url': 'https://console.dbos.dev',
+        'cancel_url': 'https://www.dbos.dev/pricing',
     }
-    res = requests.post(url, headers=headers, data=json.dumps(data))
+    res = requests.post(url, headers=headers, json=data)
     assert res.status_code == 200, f"Cloud subscribe endpoint failed: {res.status_code} - {res.text}"
 
     # Test customer portal endpoint
     url = f"https://subscribe-{config.dbos_app_name}.cloud.dbos.dev/create-customer-portal"
     headers = {
         'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
     }
-    res = requests.post(url, headers=headers)
+    data = {
+        'return_url': 'https://www.dbos.dev/pricing',
+    }
+    res = requests.post(url, headers=headers, json=data)
     assert res.status_code == 200, f"Cloud create-customer-portal endpoint failed: {res.status_code} - {res.text}"
 
     # Look up customer ID

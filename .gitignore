@@ -1,5 +1,7 @@
 local-stagging.env
 local-prod.env
+staging-cloud-secrets.env
+*.dump
 
 # Logs
 **/.DS_Store

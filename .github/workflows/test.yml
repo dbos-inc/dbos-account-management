@@ -2,7 +2,7 @@ name: Run unit tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
     types:
       - ready_for_review
@@ -37,10 +37,10 @@ jobs:
     steps:
       - name: Checkout app
         uses: actions/checkout@v4
-      - name: Use Node.js 20
+      - name: Use Node.js 22
         uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 22
       - name: Compile and test
         run: |
           npm ci
@@ -51,3 +51,4 @@ jobs:
           PGPASSWORD: dbos
           APP_DBOS_DOMAIN: staging.dev.dbos.dev
           DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
+          DBOS_DATABASE_URL: postgresql://postgres:dbos@localhost:5432/dbos?sslmode=disable

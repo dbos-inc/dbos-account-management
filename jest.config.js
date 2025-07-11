@@ -1,8 +1,11 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
-module.exports = {
-  preset: 'ts-jest',
+export default {
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   testRegex: '((\\.|/)(test|spec))\\.ts?$',
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  modulePaths: ["./"],
+  modulePaths: ['./'],
+  moduleNameMapper: {
+    '^(\\.\\.?\\/.+)\\.js$': '$1',
+  },
 };

@@ -1,7 +1,6 @@
 import { IncomingHttpHeaders } from 'http';
 import Stripe from 'stripe';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import axios from 'axios';
 import { KnexDataSource } from '@dbos-inc/knex-datasource';
 import Fastify from 'fastify';
 import rawBodyPlugin from 'fastify-raw-body';
@@ -115,19 +114,21 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
   }
 
   // Send an authenticated request to the DBOS Cloud admin API to update the user's subscription status
-  const entitlementRequest = {
+  const response = await fetch(`https://${DBOSDomain}/admin/v1alpha1/users/update-sub`, {
     method: 'POST',
-    url: `https://${DBOSDomain}/admin/v1alpha1/users/update-sub`,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    data: {
+    body: JSON.stringify({
       subject_id: dbosAuthID,
       subscription_plan: plan,
-    },
-  };
-  const response = await axios.request(entitlementRequest);
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update entitlement for user ${dbosAuthID} to plan ${plan}: ${response.statusText}`);
+  }
   DBOS.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
 
   // Send a slack notification
@@ -136,22 +137,23 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
     if (plan === DBOSPlans.free) {
       title = 'User canceled DBOS Pro :sadge:';
     }
-    const slackRequest = {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
-      url: 'https://slack.com/api/chat.postMessage',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${process.env.ZAZU_SLACK_TOKEN}`,
       },
-      data: {
+      body: JSON.stringify({
         channel: process.env.ZAZU_SLACK_CHANNEL,
         text: title,
         attachments: [
           { text: `User ${dbosAuthID} is using ${plan} tier. DBOS Cloud response status: ${response.status}` },
         ],
-      },
-    };
-    const res = await axios.request(slackRequest);
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to send slack notification: ${res.statusText}`);
+    }
     DBOS.logger.info(`Sent slack notification, response: ${res.status}`);
   }
 }
@@ -337,20 +339,21 @@ export class Utils {
     }
     const DBOSAuth0ClientID =
       DBOSDomain === 'cloud.dbos.dev' ? '6p7Sjxf13cyLMkdwn14MxlH7JdhILled' : 'G38fLmVErczEo9ioCFjVIHea6yd0qMZu';
-    const loginRequest = {
-      method: 'POST',
-      url: `https://${DBOSLoginDomain}/oauth/token`,
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      data: {
-        grant_type: 'refresh_token',
-        client_id: DBOSAuth0ClientID,
-        refresh_token: refreshToken,
-      },
-    };
     try {
       Utils.dbosAuth0Token = undefined;
-      const response = await axios.request(loginRequest);
-      const tokenResponse = response.data as RefreshTokenAuthResponse;
+      const formData = new URLSearchParams();
+      formData.append('grant_type', 'refresh_token');
+      formData.append('client_id', DBOSAuth0ClientID);
+      formData.append('refresh_token', refreshToken);
+      const response = await fetch(`https://${DBOSLoginDomain}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString(),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to retrieve access token: ${response.statusText}`);
+      }
+      const tokenResponse = (await response.json()) as RefreshTokenAuthResponse;
       Utils.dbosAuth0Token = tokenResponse.access_token;
       return tokenResponse.access_token;
     } catch (err) {

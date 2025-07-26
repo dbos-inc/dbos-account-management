@@ -28,8 +28,12 @@ describe('subscription-tests', () => {
     };
     let knexDB = knex(knexConfig);
     try {
+      // Clean up app DB
       await knexDB.raw(`DROP DATABASE IF EXISTS "${appDBName}" WITH (FORCE);`);
       await knexDB.raw(`CREATE DATABASE "${appDBName}";`);
+      // Clean up system DB
+      await knexDB.raw(`DROP DATABASE IF EXISTS "${appDBName}_dbos_sys" WITH (FORCE);`);
+      await knexDB.raw(`CREATE DATABASE "${appDBName}_dbos_sys";`);
     } finally {
       await knexDB.destroy();
     }
@@ -49,7 +53,6 @@ describe('subscription-tests', () => {
       name: 'dbos',
       databaseUrl: connectionString.toString(),
     });
-    await DBOS.dropSystemDB();
     await DBOS.launch();
   });
 

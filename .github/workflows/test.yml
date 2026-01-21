@@ -41,6 +41,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 22
+      - name: Create database
+        run: |
+          createdb -h localhost -U postgres dbos
+        env:
+          PGPASSWORD: dbos
       - name: Compile and test
         run: |
           npm ci

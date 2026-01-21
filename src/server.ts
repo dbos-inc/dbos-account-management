@@ -6,7 +6,7 @@ async function main() {
   const PORT = Number(process.env.PORT || 3000);
   DBOS.setConfig({
     name: 'dbos',
-    databaseUrl: process.env.DBOS_DATABASE_URL,
+    systemDatabaseUrl: `${process.env.DBOS_DATABASE_URL}_dbos_sys`,
   });
   await DBOS.launch();
   try {

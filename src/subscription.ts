@@ -9,6 +9,7 @@ import cors from '@fastify/cors';
 
 const DBOSDomain = process.env.APP_DBOS_DOMAIN;
 const DBOSProStripePrice = process.env.STRIPE_DBOS_PRO_PRICE ?? '';
+const DBOSTeamStripePrice = process.env.STRIPE_DBOS_TEAM_PRICE ?? '';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 export const dataSource = new KnexDataSource('knex-ds', { client: 'pg', connection: process.env.DBOS_DATABASE_URL });
 
@@ -17,6 +18,7 @@ export const DBOSLoginDomain = DBOSDomain === 'cloud.dbos.dev' ? 'login.dbos.dev
 const DBOSPlans = {
   free: 'free',
   pro: 'pro',
+  team: 'team',
 };
 
 // Register all DBOS workflows and steps
@@ -50,7 +52,7 @@ export const findAuth0UserID = dataSource.registerTransaction(findAuth0UserIDImp
 // Workflow to process Stripe events sent to the webhook endpoint
 async function stripeEventWorkflowImpl(subscriptionID: string, customerID: string) {
   // Retrieve the updated subscription from Stripe
-  const status = await DBOS.runStep(() => getSubscriptionStatus(subscriptionID), {
+  const subscriptionInfo = await DBOS.runStep(() => getSubscriptionStatus(subscriptionID), {
     name: 'getSubscriptionStatus',
     retriesAllowed: true,
     maxAttempts: 5,
@@ -60,10 +62,10 @@ async function stripeEventWorkflowImpl(subscriptionID: string, customerID: strin
   const dbosAuthID = await findAuth0UserID(customerID);
 
   // Send a request to the DBOS Cloud admin API to change the user's subscription status
-  switch (status) {
+  switch (subscriptionInfo.status) {
     case 'active':
     case 'trialing':
-      await updateCloudEntitlement(dbosAuthID, DBOSPlans.pro);
+      await updateCloudEntitlement(dbosAuthID, subscriptionInfo.plan);
       break;
     case 'canceled':
     case 'unpaid':
@@ -71,22 +73,35 @@ async function stripeEventWorkflowImpl(subscriptionID: string, customerID: strin
       await updateCloudEntitlement(dbosAuthID, DBOSPlans.free);
       break;
     default:
-      DBOS.logger.info(`Do nothing for ${status} status.`);
+      DBOS.logger.info(`Do nothing for ${subscriptionInfo.status} status, plan ${subscriptionInfo.plan}.`);
   }
 }
 
+interface SubscriptionInfo {
+  status: Stripe.Subscription.Status;
+  plan: string;
+}
+
 // Retrieve the status of a subscription from Stripe
-async function getSubscriptionStatus(subscriptionID: string): Promise<Stripe.Subscription.Status> {
+async function getSubscriptionStatus(subscriptionID: string): Promise<SubscriptionInfo> {
   const subscription = await stripe.subscriptions.retrieve(subscriptionID);
-  if (subscription.items.data[0].price.id !== DBOSProStripePrice) {
+  const priceId = subscription.items.data[0].price.id;
+
+  let plan: string;
+  if (priceId === DBOSProStripePrice) {
+    plan = DBOSPlans.pro;
+  } else if (priceId === DBOSTeamStripePrice) {
+    plan = DBOSPlans.team;
+  } else {
     throw new Error(
-      `Unknown price: ${subscription.items.data[0].price.id}; customer ${subscription.customer as string}; subscription ${subscriptionID}`,
+      `Unknown price: ${priceId}; customer ${subscription.customer as string}; subscription ${subscriptionID}`,
     );
   }
+
   DBOS.logger.info(
-    `Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string}`,
+    `Subscription ${subscriptionID} is ${subscription.status} for customer ${subscription.customer as string} on ${plan} plan`,
   );
-  return subscription.status;
+  return { status: subscription.status, plan };
 }
 
 // Find the Auth0 user ID corresponding to a Stripe customer ID
@@ -133,9 +148,13 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
 
   // Send a slack notification
   if (process.env.ZAZU_SLACK_TOKEN && dbosAuthID !== process.env.DBOS_TEST_USER) {
-    let title = 'User subscribed to DBOS Pro :partying_face:';
+    let title: string;
     if (plan === DBOSPlans.free) {
-      title = 'User canceled DBOS Pro :sadge:';
+      title = 'User canceled subscription :sadge:';
+    } else if (plan === DBOSPlans.team) {
+      title = 'User subscribed to DBOS Team :partying_face: :partying_face: :partying_face:';
+    } else {
+      title = 'User subscribed to DBOS Pro :partying_face:';
     }
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
@@ -164,7 +183,16 @@ async function createSubscriptionImpl(
   userEmail: string,
   successUrl: string,
   cancelUrl: string,
+  plan: string = DBOSPlans.pro,
 ): Promise<string | null> {
+  // Determine the Stripe price ID based on the plan
+  let priceId: string;
+  if (plan === DBOSPlans.team) {
+    priceId = DBOSTeamStripePrice;
+  } else {
+    priceId = DBOSProStripePrice;
+  }
+
   // First, look up the customer from the accounts table
   let stripeCustomerID = await findStripeCustomerID(auth0UserID);
 
@@ -180,7 +208,7 @@ async function createSubscriptionImpl(
   }
 
   // Finally, create a Stripe checkout session.
-  const res = await DBOS.runStep(() => createStripeCheckout(stripeCustomerID, successUrl, cancelUrl), {
+  const res = await DBOS.runStep(() => createStripeCheckout(stripeCustomerID, priceId, successUrl, cancelUrl), {
     name: 'createStripeCheckout',
     retriesAllowed: true,
     maxAttempts: 3,
@@ -231,6 +259,7 @@ async function recordStripeCustomerImpl(auth0UserID: string, stripeCustomerID: s
 // Create a Stripe checkout session for a customer
 async function createStripeCheckout(
   stripeCustomerID: string,
+  priceId: string,
   successUrl: string,
   cancelUrl: string,
 ): Promise<string | null> {
@@ -239,7 +268,7 @@ async function createStripeCheckout(
     billing_address_collection: 'auto',
     line_items: [
       {
-        price: DBOSProStripePrice,
+        price: priceId,
         quantity: 1,
       },
     ],
@@ -446,6 +475,7 @@ export async function buildEndpoints() {
           properties: {
             success_url: { type: 'string', format: 'uri' },
             cancel_url: { type: 'string', format: 'uri' },
+            plan: { type: 'string', enum: ['pro', 'team'] },
           },
         },
         response: {
@@ -455,6 +485,8 @@ export async function buildEndpoints() {
               url: { type: 'string', format: 'uri' },
             },
           },
+          403: { type: 'string' },
+          500: { type: 'string' },
         },
       },
     },
@@ -467,7 +499,11 @@ export async function buildEndpoints() {
         return reply.code(403).send('Forbidden: User not authorized');
       }
 
-      const { success_url, cancel_url } = request.body as { success_url: string; cancel_url: string };
+      const { success_url, cancel_url, plan } = request.body as {
+        success_url?: string;
+        cancel_url?: string;
+        plan?: string;
+      };
       const successUrl = success_url ?? 'https://console.dbos.dev';
       const cancelUrl = cancel_url ?? 'https://www.dbos.dev/pricing';
       const sessionURL = await createSubscription(
@@ -475,6 +511,7 @@ export async function buildEndpoints() {
         auth0User['https://dbos.dev/email'],
         successUrl,
         cancelUrl,
+        plan,
       );
       if (!sessionURL) {
         return reply.code(500).send('Failed to create subscription session');
@@ -503,6 +540,7 @@ export async function buildEndpoints() {
               url: { type: 'string', format: 'uri' },
             },
           },
+          403: { type: 'string' },
         },
       },
     },

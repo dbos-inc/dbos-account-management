@@ -41,6 +41,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 22
+      - name: Create database
+        run: |
+          createdb -h localhost -U postgres dbos
+        env:
+          PGPASSWORD: dbos
       - name: Compile and test
         run: |
           npm ci
@@ -52,3 +57,6 @@ jobs:
           APP_DBOS_DOMAIN: staging.dev.dbos.dev
           DBOS_LOGIN_REFRESH_TOKEN: ${{secrets.DBOS_TEST_DEPLOY_REFRESH_TOKEN}}
           DBOS_DATABASE_URL: postgresql://postgres:dbos@localhost:5432/dbos?sslmode=disable
+          STRIPE_SECRET_KEY: ${{secrets.STRIPE_TEST_SECRET_KEY}}
+          STRIPE_WEBHOOK_SECRET: ${{secrets.STRIPE_TEST_WEBHOOK_SECRET}}
+          STRIPE_DBOS_PRO_PRICE: ${{secrets.STRIPE_TEST_PRO_PRICE}}

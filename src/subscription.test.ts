@@ -51,7 +51,7 @@ describe('subscription-tests', () => {
     fastify = await buildEndpoints();
     DBOS.setConfig({
       name: 'dbos',
-      databaseUrl: connectionString.toString(),
+      systemDatabaseUrl: connectionString.toString(),
     });
     await DBOS.launch();
   });

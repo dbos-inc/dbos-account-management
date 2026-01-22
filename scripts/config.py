@@ -13,6 +13,9 @@ class Config:
         self.stripe_pro_price = os.environ['STRIPE_DBOS_PRO_PRICE']
         if not self.stripe_pro_price:
             raise Exception('STRIPE_DBOS_PRO_PRICE not set')
+        self.stripe_team_price = os.environ['STRIPE_DBOS_TEAM_PRICE']
+        if not self.stripe_team_price:
+            raise Exception('STRIPE_DBOS_TEAM_PRICE not set')
         self.stripe_secret_key = os.environ['STRIPE_SECRET_KEY']
         if not self.stripe_secret_key:
             raise Exception('STRIPE_SECRET_KEY not set')

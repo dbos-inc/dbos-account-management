@@ -1,6 +1,7 @@
 local-stagging.env
 local-prod.env
 staging-cloud-secrets.env
+prod-cloud-secrets.env
 *.dump
 
 # Logs

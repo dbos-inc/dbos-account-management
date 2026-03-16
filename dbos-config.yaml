@@ -8,6 +8,6 @@ runtimeConfig:
   start:
     - npm run start
 database:
-  app_db_name: cloud_account
+  app_db_name: ${DBOS_CONFIG_APP_DB_NAME}
   migrate:
     - npx knex migrate:latest

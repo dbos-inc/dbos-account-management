@@ -142,39 +142,32 @@ async function updateCloudEntitlementImpl(dbosAuthID: string, plan: string) {
   });
 
   if (!response.ok) {
+    // Send a slack notification if the request to DBOS Cloud fails, which may indicate an issue with the DBOS Cloud admin API or the access token
+    // Send a slack notification
+    if (process.env.ZAZU_SLACK_TOKEN) {
+      const title = response.statusText;
+      const res = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ZAZU_SLACK_TOKEN}`,
+        },
+        body: JSON.stringify({
+          channel: process.env.ZAZU_SLACK_CHANNEL,
+          text: title,
+          attachments: [
+            { text: `User ${dbosAuthID} is using ${plan} tier. DBOS Cloud response status: ${response.status}` },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to send slack notification: ${res.statusText}`);
+      }
+      DBOS.logger.info(`Sent slack notification, response: ${res.status}`);
+    }
     throw new Error(`Failed to update entitlement for user ${dbosAuthID} to plan ${plan}: ${response.statusText}`);
   }
   DBOS.logger.info(`Update entitlement for ${dbosAuthID} to plan ${plan}, response: ${response.status}`);
-
-  // Send a slack notification
-  if (process.env.ZAZU_SLACK_TOKEN && dbosAuthID !== process.env.DBOS_TEST_USER) {
-    let title: string;
-    if (plan === DBOSPlans.free) {
-      title = 'User canceled subscription :sadge:';
-    } else if (plan === DBOSPlans.team) {
-      title = 'User subscribed to DBOS Team :partying_face: :partying_face: :partying_face:';
-    } else {
-      title = 'User subscribed to DBOS Pro :partying_face:';
-    }
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.ZAZU_SLACK_TOKEN}`,
-      },
-      body: JSON.stringify({
-        channel: process.env.ZAZU_SLACK_CHANNEL,
-        text: title,
-        attachments: [
-          { text: `User ${dbosAuthID} is using ${plan} tier. DBOS Cloud response status: ${response.status}` },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to send slack notification: ${res.statusText}`);
-    }
-    DBOS.logger.info(`Sent slack notification, response: ${res.status}`);
-  }
 }
 
 // Workflow to create a Stripe checkout session

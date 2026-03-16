@@ -28,3 +28,4 @@ jobs:
           DBOS_DEPLOY_REFRESH_TOKEN: ${{secrets.DBOS_PROD_DEPLOY_REFRESH_TOKEN}}
           DBOS_APP_DB_NAME: testsubscription
           DBOS_DB_PASSWORD: ${{secrets.DBOS_TEST_DB_PASSWORD}}
+          DBOS_CONFIG_APP_DB_NAME: staging

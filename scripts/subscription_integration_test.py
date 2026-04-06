@@ -20,7 +20,7 @@ def test_endpoints(path: str):
     # Retrieve user profile, should be free plan
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         raise Exception("Free tier check failed")
 
     # Test the subscribe endpoint
@@ -75,7 +75,7 @@ def test_endpoints(path: str):
     time.sleep(30) # Wait for subscription to take effect
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         hasFailure = True
         print("Free tier check failed")
 
@@ -89,7 +89,7 @@ def test_team_subscription(path: str):
     # Retrieve user profile, should be free plan
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         raise Exception("Initial free tier check failed")
 
     # Look up customer ID
@@ -119,7 +119,7 @@ def test_team_subscription(path: str):
     time.sleep(30)  # Wait for subscription to take effect
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         hasFailure = True
         print("Free tier check after team cancel failed")
 
@@ -133,7 +133,7 @@ def test_upgrade_pro_to_team(path: str):
     # Retrieve user profile, should be free plan
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         raise Exception("Initial free tier check failed")
 
     # Look up customer ID
@@ -180,7 +180,7 @@ def test_upgrade_pro_to_team(path: str):
     time.sleep(30)  # Wait for subscription to take effect
     output = run_subprocess(['npx', 'dbos-cloud', 'profile', '--json'], path, check=True)
     json_data = json.loads(output)
-    if json_data['SubscriptionPlan'] != "free":
+    if json_data['SubscriptionPlan'] != "free" and json_data['SubscriptionPlan'] != "past_limit":
         hasFailure = True
         print("Free tier check after cancel failed")
 

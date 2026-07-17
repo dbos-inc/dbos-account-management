@@ -25,9 +25,9 @@
     "typescript-eslint": "^8.53.1"
   },
   "dependencies": {
-    "@dbos-inc/dbos-sdk": "^4.7.9",
-    "@dbos-inc/knex-datasource": "^4.7.9",
-    "@dbos-inc/otel": "^4.7.9",
+    "@dbos-inc/dbos-sdk": "^4.23.6",
+    "@dbos-inc/knex-datasource": "^4.23.6",
+    "@dbos-inc/otel": "^4.23.6",
     "@fastify/cors": "^11.2.0",
     "fastify": "^5.7.1",
     "fastify-jwt-jwks": "^3.0.0",

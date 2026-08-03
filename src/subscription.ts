@@ -270,6 +270,7 @@ async function createStripeCheckout(
     },
     customer_update: {
       name: 'auto',
+      address: 'auto',
     },
     mode: 'subscription',
     success_url: successUrl,

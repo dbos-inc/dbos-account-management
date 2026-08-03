@@ -265,6 +265,12 @@ async function createStripeCheckout(
         quantity: 1,
       },
     ],
+    tax_id_collection: {
+      enabled: true,
+    },
+    customer_update: {
+      name: 'auto',
+    },
     mode: 'subscription',
     success_url: successUrl,
     cancel_url: cancelUrl,
